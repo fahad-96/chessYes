@@ -2,10 +2,12 @@ import { Chess } from 'chess.js';
 import type { Move } from 'chess.js';
 import { materialBalance } from './material';
 import { parseUci } from './notation';
+import { bestMoveSentence } from './tactics';
 import { PIECE_VALUES } from './thresholds';
 import type {
   Classification,
   Color,
+  LineStory,
   PieceSymbol,
   SacrificeInfo,
   Score,
@@ -34,15 +36,29 @@ export interface ExplainInput {
   sacrifice?: SacrificeInfo;
   opening?: { eco: string; name: string };
   isCheckmate: boolean;
+  /**
+   * The line that shows why the move got its label (tactics.describeLine): the opponent's
+   * refutation of an error, or the idea behind a good move.
+   */
+  why?: LineStory;
+  /** For moves that were not the best: what the engine's best move would have achieved. */
+  bestIdea?: LineStory;
+  /**
+   * Where material the better move wins is counted from, when not `fenBefore`: the position
+   * before the opponent's capture that the move may take back (tactics.materialBaseline),
+   * so that taking back is not called winning material.
+   */
+  baselineFen?: string;
 }
 
 /**
  * Plain-English explanation of a move, 1-3 short sentences, no jargon beyond
- * standard chess terms. Rule-based (no AI): it looks at mates for/against,
- * material won or lost along the engine lines, hanging pieces, the sacrifice and
- * the size of the swing, and always names the better move for non-best moves,
- * e.g. "Blunder. This hangs your knight on f5: after exf5 you are down a piece.
- * Best was Nd2, keeping the position equal."
+ * standard chess terms. Rule-based (no AI): it leads with the story of the line when
+ * there is one (a fork, a pin, a hanging piece, a mate: see tactics.describeLine), and
+ * otherwise looks at mates for/against, material won or lost along the engine lines,
+ * the sacrifice and the size of the swing. It always names the better move for
+ * non-best moves, e.g. "Blunder. This leaves your rook on g8 unprotected: Bxg8 takes it
+ * for free. Best was Rxg7, which wins the undefended pawn on g7."
  */
 export function explainMove(input: ExplainInput): string {
   if (input.isCheckmate) return 'Checkmate! Well played.';
@@ -142,7 +158,10 @@ const ERROR_LABELS: Partial<Record<Classification, string>> = {
 };
 
 function explainBrilliant(input: ExplainInput): string {
-  const { sacrifice } = input;
+  const { sacrifice, why } = input;
+  // The line itself when it shows the sacrifice taken and what it leads to (describeLine
+  // opens with "You sacrifice" when the reply takes the piece and it is not won back).
+  if (ideaPays(why) && why.text.startsWith('You sacrifice')) return `Brilliant! ${why.text}`;
   const intro = sacrifice ? `Brilliant! ${describeSacrifice(sacrifice, input.uci)}` : 'Brilliant!';
 
   const mate = mateFor(input.evalAfter ?? input.playedLine?.score, input.color);
@@ -174,6 +193,9 @@ function explainGreat(input: ExplainInput): string {
         : input.winAfter > 45
           ? 'keeps the balance'
           : 'keeps you in the game';
+  if (ideaPays(input.why)) {
+    return `Great move! ${input.why.text} It is the only move that ${keeps}.`;
+  }
   const first = `Great move! This is the only move that ${keeps}.`;
   return input.secondBest ? `${first} ${describeAlternative(input, input.secondBest)}` : first;
 }
@@ -194,6 +216,7 @@ function describeAlternative(input: ExplainInput, second: SuggestedLine): string
 }
 
 function explainBest(input: ExplainInput): string {
+  if (ideaPays(input.why)) return `Best move. ${input.why.text}`;
   const mate = mateFor(input.evalAfter, input.color);
   if (mate) return `Best move. ${mateFollows(mate)}`;
   if (loadPosition(input.fenAfter)?.isStalemate()) {
@@ -205,6 +228,10 @@ function explainBest(input: ExplainInput): string {
 function explainSoundMove(input: ExplainInput): string {
   const best = input.best && input.best.san !== input.san ? input.best.san : null;
   if (input.classification === 'excellent') {
+    if (ideaPays(input.why)) {
+      const text = `Excellent move. ${input.why.text}`;
+      return best ? `${text} ${best} was slightly stronger.` : text;
+    }
     return best
       ? `Excellent move. The engine's top choice was ${best}, but this is almost as strong.`
       : 'Excellent move.';
@@ -239,16 +266,74 @@ function findReason(input: ExplainInput): Reason {
   const mateAgainst = mateFor(input.evalAfter ?? playedLine?.score, opposite(color));
   if (mateAgainst) {
     const wasLosing = mateFor(input.evalBest ?? best?.score, opposite(color)) !== null;
+    // The mating line move by move, when the story shows the mate the engine announces.
+    if (!wasLosing && input.why?.mateIn === mateAgainst) {
+      return { text: input.why.text, namesBest: false };
+    }
     return { text: allowsMate(mateAgainst, playedLine?.san, wasLosing), namesBest: false };
   }
 
   const mateBefore = mateFor(input.evalBest ?? best?.score, color);
   if (mateBefore && best) {
     const stillMating = mateFor(input.evalAfter, color) !== null;
+    if (!stillMating && input.bestIdea?.mateIn === mateBefore) {
+      return { text: input.bestIdea.text, namesBest: true };
+    }
     return { text: missedMate(mateBefore, best.san, stillMating), namesBest: true };
   }
 
-  return materialReason(input) ?? { text: describeSwing(input), namesBest: false };
+  return (
+    storyReason(input) ?? materialReason(input) ?? { text: describeSwing(input), namesBest: false }
+  );
+}
+
+/** Whether an idea story shows a payoff worth telling: a mate, a tactic or material won. */
+function ideaPays(story: LineStory | undefined): story is LineStory {
+  if (story?.kind !== 'idea') return false;
+  return story.mateIn !== undefined || story.motifs.length > 0 || story.materialSwing >= 1;
+}
+
+/** Whether a 'missed' story names something concrete the best move achieves. */
+function missedPays(story: LineStory | undefined): story is LineStory {
+  return story?.kind === 'missed' && (story.motifs.length > 0 || story.materialSwing >= 1);
+}
+
+/**
+ * The refutation, when it shows material lost that the best line keeps ("Your opponent
+ * replies Nd5+, forking your king and queen, and wins the queen."), or else the missed
+ * idea, when the best line wins material the played line does not.
+ */
+function storyReason(input: ExplainInput): Reason | null {
+  const { why, bestIdea, color } = input;
+  const picture = materialPicture(input);
+  if (!picture) return null;
+  if (why?.kind === 'refutation' && (why.motifs.length > 0 || why.materialSwing <= -1)) {
+    const end = lineEnd(why);
+    const line = end ? { fen: end, material: moverMaterial(end, color) } : null;
+    if (line && lossComparedWithBest(picture, line, color)) {
+      return { text: why.text, namesBest: false };
+    }
+  }
+  if (missedPays(bestIdea)) {
+    const played = settleLine(input.fenAfter, input.playedLine?.pvUci ?? [], color);
+    if (played && picture.best.material - played.material >= 1) {
+      return { text: bestIdea.text, namesBest: true };
+    }
+  }
+  return null;
+}
+
+/** Stories are reused across rebuilds of a review, so their end positions are too. */
+const lineEnds = new WeakMap<LineStory, string | null>();
+
+/** The position at the end of a story's shown line, or null if it cannot be replayed. */
+function lineEnd(story: LineStory): string | null {
+  if (lineEnds.has(story)) return lineEnds.get(story) ?? null;
+  const chess = loadPosition(story.fen);
+  let fen: string | null = null;
+  if (chess && story.movesUci.every((uci) => playUci(chess, uci))) fen = chess.fen();
+  lineEnds.set(story, fen);
+  return fen;
 }
 
 function allowsMate(moves: number, firstSan: string | undefined, wasLosing: boolean): string {
@@ -277,12 +362,26 @@ function materialReason(input: ExplainInput): Reason | null {
   if (loss) return { text: describeLoss(input, loss, played), namesBest: false };
 
   // Only blame the move for material the best line would have won.
-  const { start, best } = picture;
-  if (input.best && best.material - played.material >= 1) {
-    const gain = gainNoun(start.fen, best.fen, input.color);
+  const gain = missedGain(input, picture, played);
+  if (input.best && gain) {
     return { text: `You missed ${input.best.san}, which wins ${gain}.`, namesBest: true };
   }
   return null;
+}
+
+/**
+ * What the best line wins, counted from the baseline (ExplainInput.baselineFen), when it
+ * also wins more than the played line: "a pawn", "the exchange"... or null.
+ */
+function missedGain(
+  input: ExplainInput,
+  { best }: MaterialPicture,
+  played: SettledLine | null,
+): string | null {
+  const baselineFen = input.baselineFen ?? input.fenBefore;
+  if (best.material - moverMaterial(baselineFen, input.color) < 1) return null;
+  if (played && best.material - played.material < 1) return null;
+  return gainNoun(baselineFen, best.fen, input.color);
 }
 
 /** "This hangs your knight on f5: exf5 wins it." or "This loses the exchange after Nc7+." */
@@ -340,14 +439,21 @@ function describeSwing(input: ExplainInput): string {
 function adviseBest(input: ExplainInput, best: SuggestedLine): string {
   const mate = mateFor(input.evalBest ?? best.score, input.color);
   const picture = mate ? null : materialPicture(input);
-  const gain = picture ? picture.best.material - picture.start.material : 0;
+  const played = picture
+    ? settleLine(input.fenAfter, input.playedLine?.pvUci ?? [], input.color)
+    : null;
+  // "Best was Nf6+, which forks the king and queen and wins the queen.", when the best line
+  // wins more than the move played (both may simply take back the same piece).
+  const beatsPlayed = !!picture && (!played || picture.best.material - played.material >= 1);
+  const idea = beatsPlayed && missedPays(input.bestIdea) ? bestMoveSentence(input.bestIdea) : null;
+  if (idea) return idea;
+  const gain = picture ? missedGain(input, picture, played) : null;
 
   let why: string;
   if (mate) why = mate === 1 ? ', which is checkmate' : `, with mate in ${mate}`;
   else if (input.classification === 'missedWin') why = ', which keeps your winning chances';
-  else if (picture && gain >= 1) {
-    why = `, which wins ${gainNoun(picture.start.fen, picture.best.fen, input.color)}`;
-  } else if (input.winBefore >= 85) why = ', keeping a winning position';
+  else if (gain) why = `, which wins ${gain}`;
+  else if (input.winBefore >= 85) why = ', keeping a winning position';
   else if (input.winBefore >= 65) why = ', keeping a clear advantage';
   else if (input.winBefore >= 55) why = ', keeping a slight edge';
   else if (input.winBefore > 45) why = ', keeping the position equal';

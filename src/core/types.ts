@@ -41,6 +41,12 @@ export interface PositionAnalysis {
   terminal?: TerminalState;
   nodes?: number;
   timeMs?: number;
+  /**
+   * Set on an analysis from the verification pass (engine/refine.ts): the full pass's
+   * analysis it replaced. A move is judged by verified analyses only when both of its
+   * positions were verified (see core/review.ts), never by one of each.
+   */
+  unverified?: PositionAnalysis;
 }
 
 export interface AnalysisSettings {
@@ -211,8 +217,79 @@ export interface MoveReview {
   sacrifice?: SacrificeInfo;
   /** Plain-English explanation of the move. */
   explanation: string;
+  /**
+   * Why the move deserves its label, as a short line the UI can play on the board:
+   * the refutation after a bad move, or the idea behind a good one (see LineStory.kind).
+   */
+  why?: LineStory;
+  /** For moves that were not the best: what the engine's best move would have achieved. */
+  bestIdea?: LineStory;
   /** Opening name when the position after the move is in the opening book. */
   opening?: { eco: string; name: string };
+}
+
+/** A tactical pattern spotted along an engine line. */
+export type MotifType =
+  | 'fork'
+  | 'pin'
+  | 'skewer'
+  | 'discovered-attack'
+  | 'discovered-check'
+  | 'double-check'
+  | 'hanging-piece'
+  | 'trapped-piece'
+  | 'promotion'
+  | 'back-rank-mate'
+  | 'checkmate';
+
+export interface Motif {
+  type: MotifType;
+  /** Index in LineStory.movesUci of the move that creates the motif (0 = first move). */
+  step: number;
+  /** Colour of the side that executes the motif. */
+  by: Color;
+  /** Square of the piece that executes it, after the move (the forking knight, the pinning bishop...). */
+  square: Square;
+  /** Squares of the pieces it hits (forked, pinned + the piece behind, skewered...), most valuable first. */
+  targets: Square[];
+  /** Short phrase for sentences, e.g. "forks the king and queen", "pins the knight to the queen". */
+  phrase: string;
+}
+
+/** A line of moves with the story it tells, for "show me why" on the board and in speech. */
+export interface LineStory {
+  /**
+   * - 'refutation': what the opponent does after a bad move (the line after the move played);
+   * - 'idea': what a good move (brilliant, great, best) achieves (the move itself, then the
+   *   engine line after it, from the position before the move);
+   * - 'missed': what the engine's best move would have achieved (the line from the position before).
+   */
+  kind: 'refutation' | 'idea' | 'missed';
+  /** FEN the line starts from. */
+  fen: string;
+  /** The moves worth showing (usually 2-6 plies), UCI and SAN. */
+  movesUci: string[];
+  movesSan: string[];
+  motifs: Motif[];
+  /**
+   * Material won (+) or lost (-) by the player whose move is being reviewed by the end of
+   * the shown line, in pawn units, relative to the position the line starts from (for a
+   * refutation built with describeLine's `startFen`, the position before the reviewed move).
+   */
+  materialSwing: number;
+  /** Forced mate length when the line ends in checkmate (moves of the winning side). */
+  mateIn?: number;
+  /**
+   * Set when the line's first move gives material away that is not won straight back: the
+   * piece the reply takes and its square ("You sacrifice the rook on h7").
+   */
+  sacrifice?: { piece: PieceSymbol; square: Square };
+  /**
+   * One or two plain sentences telling the story, written for the player whose move is
+   * reviewed, e.g. "You sacrifice the rook on h7: after Kxh7, Nf6+ forks the king and queen
+   * and wins the queen." (core/perspective.ts rewrites it for that player's opponent.)
+   */
+  text: string;
 }
 
 export interface PlayerReview {

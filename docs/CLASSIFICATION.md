@@ -1,6 +1,6 @@
 # How Kibitz judges moves
 
-This is the public specification for every number Kibitz shows in a game review: win %, accuracy and the move labels (Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Missed Win). It is written for chess players who want to know why a move got its label, and for developers who want to change the rules.
+This is the public specification for every number Kibitz shows in a game review: win %, accuracy, the move labels (Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Missed Win) and the explanations behind them. It is written for chess players who want to know why a move got its label, and for developers who want to change the rules.
 
 Everything is computed in your browser from Stockfish's evaluations. The win % and accuracy formulas are the open formulas used by [Lichess](https://github.com/lichess-org/lila); the label rules are Kibitz's own and are listed in full below.
 
@@ -11,6 +11,8 @@ Everything is computed in your browser from Stockfish's evaluations. The win % a
 | Accuracy             | [`src/core/accuracy.ts`](../src/core/accuracy.ts)     |
 | Label rules          | [`src/core/classify.ts`](../src/core/classify.ts)     |
 | Sacrifice detection  | [`src/core/material.ts`](../src/core/material.ts)     |
+| Tactics and stories  | [`src/core/tactics.ts`](../src/core/tactics.ts)       |
+| Explanations         | [`src/core/explain.ts`](../src/core/explain.ts)       |
 | Putting it together  | [`src/core/review.ts`](../src/core/review.ts)         |
 
 If this document and the code ever disagree, the code is what runs, and the disagreement is a bug: please open an issue.
@@ -212,7 +214,50 @@ Piece values (`PIECE_VALUES`): pawn 1, knight 3, bishop 3, rook 5, queen 9.
 
 The review highlights up to 8 moves: Brilliant and Great moves first, then the Missed Wins, Blunders and Mistakes that cost the most win %. They are shown in game order.
 
-## 6. Known limitations
+## 6. Explanations
+
+Every move gets a short plain-English explanation, and the moves where it matters also get a **story**: a few moves of the engine's line that show _why_ the move got its label, which the review can play on the board and read aloud. Like the labels, explanations are rule-based: no AI writes them.
+
+| What gets a story                         | Story                                                                                                                              | Example                                                               |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Inaccuracy, Mistake, Blunder, Missed Win  | **Refutation** (`why`): the engine's line after the move, starting with the reply                                                  | "This leaves your rook on g8 unprotected: Bxg8 takes it for free."    |
+| ...when the engine preferred another move | **Missed** (`bestIdea`): the engine's line from the position before, with its best move                                            | "You missed Nf6+, which forks the king and queen and wins the queen." |
+| Brilliant, Great                          | **Idea** (`why`): the move followed by the engine's line                                                                           | "You sacrifice the queen on b8: after Nxb8, Rd8# is checkmate."       |
+| Best, Excellent                           | **Idea**, only when the move itself sets up a tactic that pays off in the line, and does more than win back material you were down | "Nf6+ forks the king and queen and wins the queen."                   |
+| Book, Forced, Good, and moves that mate   | None                                                                                                                               |                                                                       |
+
+The explanation leads with the story when the story shows something concrete: a mate, a tactic, or material that changes hands and that the best line would have kept (so a piece that was lost whatever you played is not blamed on your move). It still names the better move: "Blunder. This leaves your rook on g8 unprotected: Bxg8 takes it for free. Best was Rxg7, which wins the undefended pawn on g7." Mate counts always come from the engine's evaluation; a mate of up to 3 moves is spelled out move by move ("This allows a back-rank mate: Rc1+ Rd1 Rxd1#.").
+
+### Motifs
+
+A motif is a tactical pattern created by one move (`findMotifs` in `src/core/tactics.ts`). Kibitz prefers missing a pattern to naming one that is not there.
+
+| Motif                          | Rule                                                                                                                                                                                                                                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fork**                       | The moved piece attacks two or more pieces (not pawns) that each matter: the king (check), a piece worth more than the attacker, or a piece it could take at a profit (static exchange). At least one target is newly attacked, and the forking piece cannot simply be taken without losing material. |
+| **Pin**                        | A bishop, rook or queen attacks a knight, bishop, rook or queen with the king (absolute pin) or a more valuable piece (relative pin) right behind it. The pinned piece cannot take the pinner along the line, and the pinner cannot simply be taken.                                                  |
+| **Skewer**                     | The same line through the king, or through a piece worth more than both the attacker and the piece behind it, which is then won.                                                                                                                                                                      |
+| **Discovered attack / check**  | Moving a piece opens a line from another piece to an enemy piece (that it could take at a profit) or to the king.                                                                                                                                                                                     |
+| **Double check**               | Two pieces give check at once.                                                                                                                                                                                                                                                                        |
+| **Hanging piece**              | A capture the opponent cannot answer by winning material back on that square. Taking back on the square the previous move captured on is a trade, not a hanging piece.                                                                                                                                |
+| **Promotion**                  | A pawn promotes and the new piece cannot be won back at once.                                                                                                                                                                                                                                         |
+| **Checkmate / back-rank mate** | The move mates. It is a back-rank mate when a rook or queen mates along the king's first rank and the king's own pieces block all but at most one of the squares in front of it.                                                                                                                      |
+
+Pins, skewers and checks that already existed before the move are not reported. Trapped pieces are not detected yet: doing that reliably needs a search.
+
+### Stories
+
+`describeLine` turns an engine line into a story:
+
+1. **Which moves to show.** The line runs to the last quiet position within 6 plies (no check, and the next move is not a capture or promotion), or on to the end of a run of captures and checks still going on there (up to 11 plies). The engine line is read one move further than shown, so a line cut short in the middle of an exchange is never taken for a finished one. It is then cut right after the move that cashes in the tactic and its recapture, if the rest of the line does not change the material, and trailing moves that capture nothing are dropped. A line that ends in checkmate within 11 plies is shown in full.
+2. **Which motifs count.** Only motifs of the side carrying out the story (your opponent in a refutation, you otherwise), and only when they pay off within the shown line: that side ends up at least a pawn ahead over the whole line, from that move on, and actually captures one of the targets; or the line ends in its checkmate. A refutation counts material from the position before your move, so taking back what your move captured is a trade. Likewise, when your opponent has just started an exchange and the line takes back on that square, material is counted from before their capture: taking back is not winning material.
+3. **The text.** One or two sentences in the second person, naming pieces and squares and ending with the outcome. The leading motif is the strongest one (mate, fork, skewer, pin, checks, discovered attack, hanging piece, promotion), as long as it accounts for at least half of the material the line wins; a capture that only wins back a piece lost earlier in the line does not lead. A capture or promotion that only starts the winning says what follows ("Bxb7 wins the undefended pawn on b7 and then the exchange."). Without a motif the story names the material won: as one capture's when that capture accounts for it ("After Nc6 f4, exf4 wins a pawn.", "Your opponent replies Rxg6 and wins the exchange."), otherwise as the outcome ("you come out a pawn ahead"). A piece the opponent could already take before your move "is still hanging" rather than being left unprotected by it. A sacrifice is named when the reply takes the piece and you are still at least 2 pawns down after your next move, but not when the move answers a check, takes back what the move before captured, or leaves a piece that could already be taken, nor in a refutation you do not come out of behind. Runs of more than 4 moves read "a few moves later", since the board shows them anyway. When the line shows nothing concrete, the story only carries the moves and a neutral sentence, and the explanation does not use it. The review plays a story on the board ("Show why") only when it shows a motif, a mate, a sacrifice, or material going the way of the label: lost after a bad move, won by a good one or by the better move.
+
+Each story also records the material won or lost by the reviewed player over the shown line, the sacrifice it opens with (the board captions it), and, when it ends in mate, the length of the mate.
+
+Stories and explanations are written to the player who made the move. When the review knows which player you are, the texts of your opponent's moves are rewritten for you (`src/core/perspective.ts`): "Your opponent replies Rxg7+ and wins your pawn on g7" becomes "You reply Rxg7+ and win their pawn on g7". Puzzles tell the solution as an idea, in the present tense: "Rxg7+ forks the king and bishop and wins the bishop."
+
+## 7. Known limitations
 
 - **Engine depth.** Evaluations come from Stockfish running on your device, at depth 12, 16 or 20 depending on the preset, with a time cap per position that can stop the search earlier on slow devices. A shallow search can misjudge sharp positions, so a "Blunder" may occasionally be a deep idea the engine did not see, or the other way round. Raising the depth in Settings gives more reliable labels.
 - **Horizon effects.** Each position is searched separately, so the evaluation before and after a move can come from searches that saw different things. This is why the engine's own top move is always at least Best.
@@ -221,7 +266,7 @@ The review highlights up to 8 moves: Brilliant and Great moves first, then the M
 - **Win % is a model.** It was fitted by Lichess to games between strong players. It does not know your rating or the clock.
 - **Book coverage.** The book contains named lines from the Lichess dataset, not every popular sideline, so a game can leave "book" earlier than you might expect.
 
-## 7. Proposing changes
+## 8. Proposing changes
 
 Classification rules are meant to be discussed in the open.
 

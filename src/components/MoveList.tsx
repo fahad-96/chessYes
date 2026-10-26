@@ -101,7 +101,7 @@ export const MoveList = memo(function MoveList({
         aria-label={label}
         onClick={() => onSelect(move.ply)}
         className={cn(
-          'flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-2 text-left text-sm lg:py-1',
+          'flex min-h-10 w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-2 text-left text-sm lg:min-h-0 lg:py-1',
           'transition-colors focus-visible:outline-2 focus-visible:outline-accent',
           current ? 'bg-surface-3 font-semibold text-text' : 'hover:bg-surface-2',
           pending && !current && 'text-muted/70',

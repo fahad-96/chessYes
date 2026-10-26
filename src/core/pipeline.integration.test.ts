@@ -47,7 +47,11 @@ function printTable(moves: MoveReview[]): void {
     const label =
       `${m.ply}`.padStart(2) + ` ${Math.ceil(m.ply / 2)}${m.color === 'w' ? '.' : '...'}`;
     const win = `${m.winBefore.toFixed(1)} -> ${m.winAfter.toFixed(1)}`;
-    return `${label.padEnd(9)} ${m.san.padEnd(7)} ${m.classification.padEnd(10)} ${win}`;
+    const why = m.why
+      ? `
+          ${m.why.kind}: ${m.why.movesSan.join(' ')} | ${m.why.text}`
+      : '';
+    return `${label.padEnd(9)} ${m.san.padEnd(7)} ${m.classification.padEnd(10)} ${win}${why}`;
   });
   console.log(['Opera Game review (mover win %):', ...rows].join('\n'));
 }
@@ -104,6 +108,30 @@ describe('review pipeline on the Opera Game (real engine, real book)', () => {
     expect(qb8.classification).toBe('brilliant');
     expect(qb8.sacrifice).toMatchObject({ piece: 'q', square: 'b8' });
     expect(qb8.explanation).toMatch(/^Brilliant!/);
+  });
+
+  it('shows the idea behind 16.Qb8+: the queen sacrifice and the mate', () => {
+    const qb8 = moveBy('w', 'Qb8+');
+    expect(qb8.why).toMatchObject({ kind: 'idea', mateIn: 2, movesSan: ['Qb8+', 'Nxb8', 'Rd8#'] });
+    expect(qb8.why?.text).toBe('You sacrifice the queen on b8: after Nxb8, Rd8# is checkmate.');
+    expect(qb8.explanation).toBe(
+      'Brilliant! You sacrifice the queen on b8: after Nxb8, Rd8# is checkmate.',
+    );
+  });
+
+  it('shows the refutation of every inaccuracy, mistake, blunder and missed win', () => {
+    const errors = review.moves.filter((m) =>
+      (['inaccuracy', 'mistake', 'blunder', 'missedWin'] as const).some(
+        (label) => label === m.classification,
+      ),
+    );
+    expect(errors.length).toBeGreaterThan(0);
+    for (const move of errors) {
+      expect(move.why?.kind).toBe('refutation');
+      expect(move.why?.fen).toBe(game.moves[move.ply - 1]!.fenAfter);
+      expect(move.why?.movesUci[0]).toBe(move.playedLine?.uci);
+      expect(move.why?.text.trim()).not.toBe('');
+    }
   });
 
   it('labels the only legal reply 16...Nxb8 Forced', () => {

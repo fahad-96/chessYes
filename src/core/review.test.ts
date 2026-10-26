@@ -301,6 +301,20 @@ describe('buildGameReview: classifications in context', () => {
     expect(qxf7?.explanation).toBe('Checkmate! Well played.');
   });
 
+  it('does not call the other recapture a material gain (4.Bxc6 dxc6?, best bxc6)', () => {
+    const game = gameFromSan(['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Bxc6', 'dxc6']);
+    const analyses = [
+      ...flatAnalyses(game, [30, 30, 30, 30, 30, 30, 30]),
+      analysed(game, 7, ['b7c6 e1g1 d7d6', cp(30)], ['d7c6 e1g1 f7f6', cp(250)]),
+      analysed(game, 8, ['e1g1 f7f6', cp(250)]),
+    ];
+    const dxc6 = buildGameReview(game, analyses, NO_BOOK).moves[7]!;
+    expect(dxc6.classification).toBe('mistake');
+    expect(dxc6.explanation).not.toContain('wins');
+    expect(dxc6.bestIdea?.materialSwing).toBe(0);
+    expect(dxc6.bestIdea?.text).toBe('bxc6 was the strongest move.');
+  });
+
   it('does not label stepping out of a fork Brilliant (the forked rook was already lost)', () => {
     // ...Nc2+ forks Ke1 and Ra1; Kd2 is the engine's move and keeps White winning.
     const game = gameFromSan(['Kd2'], '4k3/8/8/8/8/8/2n5/R3K2R w KQ - 0 1');
@@ -442,6 +456,42 @@ describe('buildGameReview: classifications in context', () => {
       pvUci: ['d2d4', 'd7d5', 'e2e4'],
       pvSan: ['d4', 'd5', 'e4'],
     });
+  });
+});
+
+describe('buildGameReview: verified analyses', () => {
+  // 1.e4 e5 2.Nf3, all equal at first; the verification pass re-checked 1...e5 (positions
+  // 1 and 2) and found both positions much better for Black.
+  const game = gameFromSan(['e4', 'e5', 'Nf3']);
+  // The engine preferred 1.d4, so 1.e4 is judged by its loss alone.
+  const original = [
+    analysed(game, 0, ['d2d4 d7d5', cp(30)], ['e2e4 e7e5', cp(30)]),
+    ...flatAnalyses(game, [30, 30, 30, 30]).slice(1),
+  ];
+  const verify = (index: number): PositionAnalysis => ({
+    ...original[index]!,
+    depth: 20,
+    lines: original[index]!.lines.map((line) => ({ ...line, score: cp(-300), depth: 20 })),
+    unverified: original[index]!,
+  });
+  const analyses = [original[0]!, verify(1), verify(2), original[3]!];
+
+  it('judges a move by verified analyses only when both of its positions were verified', () => {
+    const review = buildGameReview(game, analyses, NO_BOOK);
+    // 1.e4 and 2.Nf3 each have one verified and one unverified position: full-pass pairs.
+    expect(classifications(review.moves).slice(1)).toEqual(['best', 'best']);
+    expect(review.moves[0]!.winLoss).toBeCloseTo(0);
+    expect(review.moves[2]!.winBefore).toBeCloseTo(review.moves[2]!.winAfter);
+    // 1...e5 is judged by the two verified positions.
+    expect(review.moves[1]!.winBefore).toBeCloseTo(100 - cpToWinPercent(-300));
+    // The graph shows the best estimate of every position.
+    expect(review.whiteWinPercents[1]).toBeCloseTo(cpToWinPercent(-300));
+  });
+
+  it('would turn the unchecked neighbours into errors if pairs were mixed', () => {
+    const mixed = analyses.map(({ unverified: _, ...analysis }) => analysis);
+    const review = buildGameReview(game, mixed, NO_BOOK);
+    expect(review.moves[0]!.classification).toBe('blunder');
   });
 });
 
@@ -617,6 +667,112 @@ describe('buildGameReview: opening book', () => {
     const book = fakeBook([[after(2), KINGS_PAWN]]);
     const result = buildGameReview(game, analyses, { book, engine: ENGINE });
     expect(result.moves.every((m) => m.classification !== 'book')).toBe(true);
+  });
+});
+
+describe('buildGameReview: stories behind the labels', () => {
+  /** Before 31.Rg8?? in the user's game fahadkmr - JJose8 (Chess.com, 2026). */
+  const BEFORE_31 = '7R/1R4p1/3k1p1p/4p3/p7/1b4P1/r4P1P/6K1 w - - 2 31';
+  const ROYAL_FORK = 'r5k1/pppq1p1p/6p1/3N4/8/8/PPP2PPP/3Q2K1 w - - 0 1';
+
+  function rg8Review() {
+    const game = gameFromSan(['Rg8'], BEFORE_31);
+    const analyses = [
+      analysed(
+        game,
+        0,
+        ['b7g7 b3d5 h8d8 d6c5 f2f4 d5c6 f4e5 f6e5', cp(0)],
+        ['h8h7 b3d5 b7b6 d6c5', cp(-60)],
+      ),
+      analysed(game, 1, ['b3g8 g1f1 g8c4 f1e1 a4a3 b7a7', cp(-727)]),
+    ];
+    return { game, review: buildGameReview(game, analyses, NO_BOOK) };
+  }
+
+  it('shows the refutation of a blunder and what the best move would have done', () => {
+    const { game, review } = rg8Review();
+    const [rg8] = review.moves;
+    expect(rg8?.classification).toBe('blunder');
+    expect(rg8?.why).toMatchObject({
+      kind: 'refutation',
+      fen: game.moves[0]!.fenAfter,
+      movesUci: ['b3g8'],
+      movesSan: ['Bxg8'],
+      materialSwing: -5,
+    });
+    expect(rg8?.bestIdea).toMatchObject({
+      kind: 'missed',
+      fen: game.moves[0]!.fenBefore,
+      movesSan: ['Rxg7'],
+      materialSwing: 1,
+    });
+    expect(rg8?.explanation).toBe(
+      'Blunder. This leaves your rook on g8 unprotected: Bxg8 takes it for free. ' +
+        'Best was Rxg7, which wins the undefended pawn on g7.',
+    );
+    expect(explainMock).toHaveBeenCalledWith(
+      expect.objectContaining({ why: rg8?.why, bestIdea: rg8?.bestIdea }),
+    );
+  });
+
+  it('reuses the stories when the review is rebuilt during the analysis', () => {
+    const first = rg8Review().review.moves[0];
+    const again = rg8Review().review.moves[0];
+    expect(again?.why).toBe(first?.why);
+    expect(again?.bestIdea).toBe(first?.bestIdea);
+  });
+
+  it('shows the idea behind Brilliant and Great moves', () => {
+    const analyses = scholarAnalyses();
+    analyses[3] = analysed(SCHOLAR, 3, ['b8c6 f1c4', cp(0)], ['g7g6 h5e5', cp(250)]);
+    const bishop = { material: 3, square: 'c4' as const, piece: 'b' as const };
+    sacrificeMock.mockImplementation((_fen, uci) => (uci === 'f1c4' ? bishop : null));
+    const { moves } = buildGameReview(SCHOLAR, analyses, NO_BOOK);
+    expect(moves[3]).toMatchObject({ classification: 'great', why: { kind: 'idea' } });
+    expect(moves[3]?.why?.movesUci[0]).toBe('b8c6');
+    expect(moves[4]).toMatchObject({ classification: 'brilliant', why: { kind: 'idea' } });
+    expect(moves[4]?.why?.fen).toBe(SCHOLAR.moves[4]!.fenBefore);
+    expect('bestIdea' in moves[4]!).toBe(false);
+  });
+
+  it('tells the idea of a best move only when the move itself sets up a tactic', () => {
+    const game = gameFromSan(['Nf6+', 'Kg7', 'Kf1'], ROYAL_FORK);
+    const analyses = [
+      analysed(game, 0, ['d5f6 g8g7 f6d7 a8d8', cp(900)], ['d1d4 d7d4', cp(800)]),
+      analysed(game, 1, ['g8g7 f6d7 a8d8', cp(900)]),
+      analysed(game, 2, ['f6d7 a8d8', cp(900)], ['g1f1 d7d1', cp(-500)]),
+      analysed(game, 3, ['d7d1', cp(-900)]),
+    ];
+    const [nf6, kg7, kf1] = buildGameReview(game, analyses, NO_BOOK).moves;
+    expect(nf6?.classification).toBe('best');
+    expect(nf6?.why).toMatchObject({
+      kind: 'idea',
+      movesSan: ['Nf6+', 'Kg7', 'Nxd7'],
+      text: 'Nf6+ forks the king and queen and wins the queen.',
+    });
+    expect(nf6?.explanation).toBe('Best move. Nf6+ forks the king and queen and wins the queen.');
+    expect('why' in kg7!).toBe(false);
+    // The blunder that drops the knight gets its refutation, and the fork it missed.
+    expect(kf1?.classification).toBe('blunder');
+    expect(kf1?.why?.kind).toBe('refutation');
+    expect(kf1?.bestIdea?.text).toBe('You missed Nxd7, which wins the undefended queen on d7.');
+  });
+
+  it('gives no story to book, forced or good moves, nor to checkmates', () => {
+    const { moves } = buildGameReview(SCHOLAR, scholarAnalyses(), NO_BOOK);
+    expect(moves[2]?.classification).toBe('good');
+    for (const move of [moves[0], moves[2], moves[6]]) {
+      expect('why' in move!).toBe(false);
+      expect('bestIdea' in move!).toBe(false);
+    }
+    // The blunder 3...Nf6?? still shows the mate it allows.
+    expect(moves[5]?.why).toMatchObject({ kind: 'refutation', mateIn: 1, movesSan: ['Qxf7#'] });
+    const forced = gameFromSan(['Kxb2'], 'k7/8/8/8/8/8/1r6/K7 w - - 0 1');
+    const forcedAnalyses = [
+      analysed(forced, 0, ['a1b2', cp(0)]),
+      terminal(forced, 1, 'insufficient'),
+    ];
+    expect('why' in buildGameReview(forced, forcedAnalyses, NO_BOOK).moves[0]!).toBe(false);
   });
 });
 

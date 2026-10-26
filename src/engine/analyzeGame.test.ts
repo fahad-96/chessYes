@@ -8,7 +8,7 @@ import type {
   PositionAnalysis,
   TerminalState,
 } from '@/core/types';
-import { analyzeGame } from './analyzeGame';
+import { analyzeGame, analyzePositions } from './analyzeGame';
 import type { AnalyzeRequest, Engine } from './stockfish';
 
 const settings = { depth: 14, multiPv: 2, maxTimeMs: 2000 };
@@ -269,5 +269,81 @@ describe('analyzeGame', () => {
     await expect(run).rejects.toMatchObject({ name: 'AbortError' });
     expect(engine.newGameCalls).toBe(0);
     expect(engine.requests).toHaveLength(0);
+  });
+});
+
+describe('analyzePositions', () => {
+  it('searches only the requested positions, once each, in order, with the history', async () => {
+    const game = makeGame(['e4', 'e5', 'Nf3', 'Nc6']);
+    const engine = new FakeEngine();
+    const reported: number[] = [];
+    const results = await analyzePositions(game, {
+      engine,
+      settings: { depth: 20, multiPv: 2, maxTimeMs: 8000 },
+      indices: [3, 1, 3, 2],
+      onPosition: (index) => reported.push(index),
+    });
+
+    expect(reported).toEqual([1, 2, 3]);
+    expect([...results.keys()]).toEqual([1, 2, 3]);
+    expect(engine.requests.map((r) => r.moves)).toEqual([
+      ['e2e4'],
+      ['e2e4', 'e7e5'],
+      ['e2e4', 'e7e5', 'g1f3'],
+    ]);
+    for (const request of engine.requests) {
+      expect(request).toMatchObject({ depth: 20, maxTimeMs: 8000, initialFen: START_FEN });
+    }
+    expect(results.get(2)?.fen).toBe(game.moves[1]!.fenAfter);
+  });
+
+  it('keeps the hash table: the engine is not reset', async () => {
+    const engine = new FakeEngine();
+    await analyzePositions(makeGame(['e4']), { engine, settings, indices: [0, 1] });
+    expect(engine.newGameCalls).toBe(0);
+  });
+
+  it('skips positions where the game is over and indices outside the game', async () => {
+    const game = makeGame(['Rh8#'], 'k7/8/1K6/8/8/8/8/7R w - - 0 1', 'checkmate');
+    const engine = new FakeEngine();
+    const results = await analyzePositions(game, { engine, settings, indices: [-1, 0, 1, 2] });
+    expect([...results.keys()]).toEqual([0]);
+    expect(engine.requests).toHaveLength(1);
+  });
+
+  it('counts progress in positions to search', async () => {
+    const game = makeGame(['e4', 'e5', 'Nf3']);
+    const engine = new FakeEngine();
+    const progress: AnalysisProgress[] = [];
+    await analyzePositions(game, {
+      engine,
+      settings,
+      indices: [1, 3],
+      onProgress: (p) => progress.push(p),
+    });
+    expect(progress.map((p) => [p.done, p.total])).toEqual([
+      [1, 2],
+      [2, 2],
+    ]);
+    expect(progress[1]!.etaMs).toBe(0);
+  });
+
+  it('rejects with AbortError, keeping what was reported', async () => {
+    const game = makeGame(['e4', 'e5', 'Nf3']);
+    const engine = new FakeEngine();
+    const controller = new AbortController();
+    const reported: number[] = [];
+    const run = analyzePositions(game, {
+      engine,
+      settings,
+      indices: [0, 1, 2],
+      signal: controller.signal,
+      onPosition: (index) => {
+        reported.push(index);
+        controller.abort();
+      },
+    });
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+    expect(reported).toEqual([0]);
   });
 });

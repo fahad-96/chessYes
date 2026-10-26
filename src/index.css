@@ -163,6 +163,11 @@ body {
   outline-offset: 2px;
 }
 
+/* Focus moved to the page content after navigation (Layout) needs no ring around the page. */
+main[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }

@@ -56,6 +56,67 @@ function planStep(
     : { kind: 'search', fen, legalMoves };
 }
 
+/** One engine search for position `index`, reporting live progress through `onUpdate`. */
+function searchPosition(
+  engine: Engine,
+  game: ParsedGame,
+  index: number,
+  step: Extract<Step, { kind: 'search' }>,
+  settings: AnalysisSettings,
+  signal: AbortSignal | undefined,
+  onUpdate: ((partial: PositionAnalysis) => void) | undefined,
+): Promise<PositionAnalysis> {
+  return engine.analyze({
+    fen: step.fen,
+    initialFen: game.initialFen,
+    moves: game.moves.slice(0, index).map((move) => move.uci),
+    depth: settings.depth,
+    multiPv: Math.max(1, Math.min(settings.multiPv, step.legalMoves)),
+    maxTimeMs: settings.maxTimeMs,
+    signal,
+    onUpdate,
+  });
+}
+
+/**
+ * Times the searches of one run and turns that into progress events: an ETA from the average
+ * time per searched position, and the depth and speed of the search in progress.
+ */
+function createProgressReporter(total: number, searches: number) {
+  let searched = 0;
+  let searchTimeMs = 0;
+  let remaining = searches;
+  const averageMs = () => (searched > 0 ? searchTimeMs / searched : undefined);
+
+  return {
+    /** Progress while a search runs (`done` positions finished before it). */
+    live(done: number, startedAt: number, partial: PositionAnalysis): AnalysisProgress {
+      const progress: AnalysisProgress = { done, total, currentDepth: partial.depth };
+      const average = averageMs();
+      if (average !== undefined) {
+        const elapsed = Date.now() - startedAt;
+        progress.etaMs = Math.max(0, Math.round(average * remaining - elapsed));
+      }
+      if (partial.nodes !== undefined && partial.timeMs) {
+        progress.nps = Math.round((partial.nodes * 1000) / partial.timeMs);
+      }
+      return progress;
+    },
+    searchFinished(startedAt: number): void {
+      searchTimeMs += Date.now() - startedAt;
+      searched += 1;
+      remaining -= 1;
+    },
+    /** Progress after a position is finished. */
+    finished(done: number): AnalysisProgress {
+      const progress: AnalysisProgress = { done, total };
+      const average = averageMs();
+      if (average !== undefined) progress.etaMs = Math.round(average * remaining);
+      return progress;
+    },
+  };
+}
+
 /**
  * Analyses every position of a game: index 0 = start, index i = after move i.
  * - Positions are searched in order so the UI can stream results.
@@ -81,13 +142,13 @@ export async function analyzeGame(
     planStep(game, index, existing[index]),
   );
   const total = steps.length;
-  let remainingSearches = steps.filter((step) => step.kind === 'search').length;
+  const reporter = createProgressReporter(
+    total,
+    steps.filter((step) => step.kind === 'search').length,
+  );
 
   const results: PositionAnalysis[] = [];
-  let searched = 0;
-  let searchTimeMs = 0;
   let newGameSent = false;
-  const averageMs = () => (searched > 0 ? searchTimeMs / searched : undefined);
 
   for (const [index, step] of steps.entries()) {
     if (signal?.aborted) throw abortError();
@@ -102,42 +163,73 @@ export async function analyzeGame(
 
       const startedAt = Date.now();
       const done = results.length;
-      analysis = await engine.analyze({
-        fen: step.fen,
-        initialFen: game.initialFen,
-        moves: game.moves.slice(0, index).map((move) => move.uci),
-        depth: settings.depth,
-        multiPv: Math.max(1, Math.min(settings.multiPv, step.legalMoves)),
-        maxTimeMs: settings.maxTimeMs,
-        signal,
-        onUpdate: (partial) => {
-          if (!onProgress) return;
-          const progress: AnalysisProgress = { done, total, currentDepth: partial.depth };
-          const average = averageMs();
-          if (average !== undefined) {
-            const elapsed = Date.now() - startedAt;
-            progress.etaMs = Math.max(0, Math.round(average * remainingSearches - elapsed));
-          }
-          if (partial.nodes !== undefined && partial.timeMs) {
-            progress.nps = Math.round((partial.nodes * 1000) / partial.timeMs);
-          }
-          onProgress(progress);
-        },
-      });
-      searchTimeMs += Date.now() - startedAt;
-      searched += 1;
-      remainingSearches -= 1;
+      analysis = await searchPosition(engine, game, index, step, settings, signal, (partial) =>
+        onProgress?.(reporter.live(done, startedAt, partial)),
+      );
+      reporter.searchFinished(startedAt);
     } else {
       analysis = step.analysis;
     }
 
     results.push(analysis);
     onPosition?.(index, analysis);
+    onProgress?.(reporter.finished(results.length));
+  }
 
-    const progress: AnalysisProgress = { done: results.length, total };
-    const average = averageMs();
-    if (average !== undefined) progress.etaMs = Math.round(average * remainingSearches);
-    onProgress?.(progress);
+  return results;
+}
+
+export interface AnalyzePositionsOptions {
+  engine: Engine;
+  settings: AnalysisSettings;
+  /** Positions to search (0 = start, i = after move i). Duplicates are searched once. */
+  indices: readonly number[];
+  signal?: AbortSignal;
+  /** Called once per searched position, in index order. */
+  onPosition?: (index: number, analysis: PositionAnalysis) => void;
+  /** `done` and `total` count the positions to search, not the whole game. */
+  onProgress?: (progress: AnalysisProgress) => void;
+}
+
+/**
+ * Searches selected positions of a game again, for example to verify a shallow result at a
+ * greater depth (see refine.ts). Unlike analyzeGame it ignores earlier results and keeps the
+ * engine's hash table (what the engine learned about this game only helps). Positions where
+ * the game is over have nothing to search and are skipped. The engine still receives the
+ * move history, so repetitions are seen.
+ *
+ * Resolves with the new analyses by position index. Rejects with an AbortError when the
+ * signal aborts; results reported via onPosition so far remain valid.
+ */
+export async function analyzePositions(
+  game: ParsedGame,
+  options: AnalyzePositionsOptions,
+): Promise<Map<number, PositionAnalysis>> {
+  const { engine, settings, indices, signal, onPosition, onProgress } = options;
+  if (signal?.aborted) throw abortError();
+
+  const last = game.moves.length;
+  const searches = [...new Set(indices)]
+    .filter((index) => Number.isInteger(index) && index >= 0 && index <= last)
+    .sort((a, b) => a - b)
+    .map((index) => ({ index, step: planStep(game, index, undefined) }))
+    .filter(
+      (item): item is { index: number; step: Extract<Step, { kind: 'search' }> } =>
+        item.step.kind === 'search',
+    );
+  const reporter = createProgressReporter(searches.length, searches.length);
+  const results = new Map<number, PositionAnalysis>();
+
+  for (const [done, { index, step }] of searches.entries()) {
+    if (signal?.aborted) throw abortError();
+    const startedAt = Date.now();
+    const analysis = await searchPosition(engine, game, index, step, settings, signal, (partial) =>
+      onProgress?.(reporter.live(done, startedAt, partial)),
+    );
+    reporter.searchFinished(startedAt);
+    results.set(index, analysis);
+    onPosition?.(index, analysis);
+    onProgress?.(reporter.finished(done + 1));
   }
 
   return results;

@@ -56,6 +56,42 @@ const CREDITS: Credit[] = [
     note: 'Piece set by Colin M.L. Burnett.',
   },
   {
+    name: 'Kokoro-82M',
+    href: 'https://huggingface.co/hexgrad/Kokoro-82M',
+    license: 'Apache-2.0',
+    note: 'The optional natural voice, by hexgrad. Its weights are downloaded from the Hugging Face Hub only if you turn it on in Settings.',
+  },
+  {
+    name: 'kokoro-js',
+    href: 'https://github.com/hexgrad/kokoro',
+    license: 'Apache-2.0',
+    note: 'Runs Kokoro in the browser.',
+  },
+  {
+    name: 'Transformers.js',
+    href: 'https://github.com/huggingface/transformers.js',
+    license: 'Apache-2.0',
+    note: 'Machine-learning models in the browser, by Hugging Face.',
+  },
+  {
+    name: 'ONNX Runtime Web',
+    href: 'https://github.com/microsoft/onnxruntime',
+    license: 'MIT',
+    note: 'Runs the voice model on your GPU, by Microsoft.',
+  },
+  {
+    name: 'phonemizer.js',
+    href: 'https://github.com/xenova/phonemizer.js',
+    license: 'Apache-2.0',
+    note: 'Turns text into speech sounds for the natural voice, by Xenova.',
+  },
+  {
+    name: 'eSpeak NG',
+    href: 'https://github.com/espeak-ng/espeak-ng',
+    license: 'GPL-3.0-or-later',
+    note: 'The pronunciation rules inside phonemizer.js, compiled to WebAssembly.',
+  },
+  {
     name: 'React',
     href: 'https://react.dev',
     license: 'MIT',
@@ -145,8 +181,10 @@ export default function AboutPage() {
           <p className="mt-2 leading-relaxed text-muted">
             To kibitz is to comment on a game you are watching. Kibitz comments on yours: a free,
             open-source game review for every chess player, with every move classified, accuracy for
-            both sides, an evaluation graph and plain-English explanations. Game review should not
-            sit behind a paywall.
+            both sides, an evaluation graph, and plain-English explanations that show on the board
+            why a move was brilliant or a blunder, read aloud if you like. Insights across your
+            games and puzzles from your own mistakes come with it. Game review should not sit behind
+            a paywall.
           </p>
         </div>
       </header>

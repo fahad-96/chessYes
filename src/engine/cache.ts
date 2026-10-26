@@ -19,6 +19,24 @@ interface CacheEntry {
   v: typeof CACHE_VERSION;
   savedAt: number;
   analyses: (PositionAnalysis | null)[];
+  /**
+   * The verification pass (engine/refine.ts) has run over these analyses. Optional, so
+   * entries saved before it existed stay valid; they are simply verified on the next visit.
+   */
+  refined?: boolean;
+}
+
+/** A cache entry as callers see it. */
+export interface CachedAnalyses {
+  /** Possibly partial: null where a position has not been analysed. */
+  analyses: (PositionAnalysis | null)[];
+  /** Whether the verification pass has run (see engine/refine.ts). */
+  refined: boolean;
+}
+
+export interface SaveAnalysesOptions {
+  /** Marks the analyses as verified. Saving without it marks them as not verified. */
+  refined?: boolean;
 }
 
 const TERMINAL_STATES: readonly TerminalState[] = [
@@ -47,22 +65,34 @@ export function analysisCacheKey(
   return `${gameId}|${engineName}|d${depth}|pv${multiPv}|t${maxTimeMs}`;
 }
 
-/** Returns cached (possibly partial) analyses, or null. Never throws (storage may be unavailable). */
-export async function loadAnalyses(key: string): Promise<(PositionAnalysis | null)[] | null> {
+/**
+ * Returns the cached (possibly partial) analyses and whether they were verified, or null.
+ * Never throws (storage may be unavailable).
+ */
+export async function loadCachedAnalyses(key: string): Promise<CachedAnalyses | null> {
   try {
     const entry: unknown = await get(key, analysisStore());
     if (!isCacheEntry(entry)) return null;
-    // Structured clone keeps holes in sparse arrays; callers expect explicit nulls.
-    return Array.from(entry.analyses, (analysis) => analysis ?? null);
+    return {
+      // Structured clone keeps holes in sparse arrays; callers expect explicit nulls.
+      analyses: Array.from(entry.analyses, (analysis) => analysis ?? null),
+      refined: entry.refined === true,
+    };
   } catch {
     return null;
   }
 }
 
+/** Returns cached (possibly partial) analyses, or null. Never throws (storage may be unavailable). */
+export async function loadAnalyses(key: string): Promise<(PositionAnalysis | null)[] | null> {
+  return (await loadCachedAnalyses(key))?.analyses ?? null;
+}
+
 /** Saves analyses. Never throws. */
 export async function saveAnalyses(
   key: string,
-  analyses: (PositionAnalysis | null)[],
+  analyses: readonly (PositionAnalysis | null)[],
+  options: SaveAnalysesOptions = {},
 ): Promise<void> {
   try {
     const entry: CacheEntry = {
@@ -70,6 +100,7 @@ export async function saveAnalyses(
       savedAt: Date.now(),
       analyses: Array.from(analyses, (analysis) => analysis ?? null),
     };
+    if (options.refined) entry.refined = true;
     await set(key, entry, analysisStore());
   } catch {
     // Quota exceeded or storage unavailable: the analysis still works, it just is not cached.
@@ -114,7 +145,7 @@ function isEngineLine(value: unknown): boolean {
   );
 }
 
-function isPositionAnalysis(value: unknown): value is PositionAnalysis {
+function isPositionAnalysis(value: unknown, nested = false): value is PositionAnalysis {
   return (
     isRecord(value) &&
     typeof value.fen === 'string' &&
@@ -123,7 +154,9 @@ function isPositionAnalysis(value: unknown): value is PositionAnalysis {
     value.lines.every(isEngineLine) &&
     (value.terminal === undefined || TERMINAL_STATES.includes(value.terminal as TerminalState)) &&
     (value.nodes === undefined || isFiniteNumber(value.nodes)) &&
-    (value.timeMs === undefined || isFiniteNumber(value.timeMs))
+    (value.timeMs === undefined || isFiniteNumber(value.timeMs)) &&
+    // A verified analysis keeps the one it replaced (one level deep).
+    (value.unverified === undefined || (!nested && isPositionAnalysis(value.unverified, true)))
   );
 }
 
@@ -131,6 +164,7 @@ function isCacheEntry(value: unknown): value is CacheEntry {
   return (
     isRecord(value) &&
     value.v === CACHE_VERSION &&
+    (value.refined === undefined || typeof value.refined === 'boolean') &&
     Array.isArray(value.analyses) &&
     value.analyses.every((analysis: unknown) => analysis == null || isPositionAnalysis(analysis))
   );

@@ -41,6 +41,17 @@ export const PRESETS: Record<PresetId, Preset> = {
 };
 
 /**
+ * The quick first pass that runs before a preset's full pass, so a complete (provisional)
+ * review appears within seconds even on a phone; the full pass then replaces it position by
+ * position. Tuned with src/engine/quickPass.bench.test.ts.
+ */
+export const QUICK_PASS: AnalysisSettings = {
+  depth: 8,
+  multiPv: 2,
+  maxTimeMs: 250,
+};
+
+/**
  * Picks a preset for this device: 'fast' on phones/tablets or low-end hardware
  * (hardwareConcurrency <= 4 or deviceMemory <= 4), otherwise 'standard'.
  * Safe to call outside a browser (returns 'standard').

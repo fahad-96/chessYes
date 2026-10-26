@@ -1,4 +1,13 @@
-import { ArrowDownUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  ArrowDownUp,
+  ChevronFirst,
+  ChevronLast,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+  RotateCcw,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
@@ -7,8 +16,13 @@ export interface BoardNavProps {
   totalPlies: number;
   onSeek: (ply: number) => void;
   onFlip: () => void;
+  /** Disables the move buttons (flipping still works), e.g. while retrying a move. */
+  stepsDisabled?: boolean;
   /** Draws its own border and background (false when a parent bar provides them). */
   framed?: boolean;
+  /** Given for lines that play themselves (engine lines, "show why"): adds play / pause. */
+  onTogglePlay?: () => void;
+  playing?: boolean;
   className?: string;
 }
 
@@ -21,7 +35,7 @@ function NavButton({
   wide,
 }: {
   label: string;
-  shortcut: string;
+  shortcut?: string;
   onClick: () => void;
   disabled?: boolean;
   children: ReactNode;
@@ -32,7 +46,7 @@ function NavButton({
       type="button"
       aria-label={label}
       aria-keyshortcuts={shortcut}
-      title={`${label} (${shortcut})`}
+      title={shortcut ? `${label} (${shortcut})` : label}
       onClick={onClick}
       disabled={disabled}
       className={cn(
@@ -53,11 +67,14 @@ export function BoardNav({
   totalPlies,
   onSeek,
   onFlip,
+  stepsDisabled = false,
   framed = true,
+  onTogglePlay,
+  playing = false,
   className,
 }: BoardNavProps) {
-  const atStart = ply <= 0;
-  const atEnd = ply >= totalPlies;
+  const atStart = stepsDisabled || ply <= 0;
+  const atEnd = stepsDisabled || ply >= totalPlies;
   return (
     <nav
       aria-label="Move navigation"
@@ -79,6 +96,21 @@ export function BoardNav({
       >
         <ChevronLeft aria-hidden="true" className="h-6 w-6" />
       </NavButton>
+      {onTogglePlay && (
+        <NavButton
+          label={playing ? 'Pause' : ply >= totalPlies ? 'Play again' : 'Play'}
+          shortcut="Space"
+          onClick={onTogglePlay}
+        >
+          {playing ? (
+            <Pause aria-hidden="true" className="h-5 w-5" />
+          ) : ply >= totalPlies ? (
+            <RotateCcw aria-hidden="true" className="h-5 w-5" />
+          ) : (
+            <Play aria-hidden="true" className="h-5 w-5" />
+          )}
+        </NavButton>
+      )}
       <NavButton
         label="Next move"
         shortcut="ArrowRight"

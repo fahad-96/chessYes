@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { MoveReview, ParsedMove, PositionAnalysis } from '@/core/types';
+import type {
+  GameRecord,
+  GameReview,
+  MoveReview,
+  ParsedGame,
+  ParsedMove,
+  PositionAnalysis,
+} from '@/core/types';
 import { PgnError } from '@/core/pgn';
+import { PRESETS } from '@/engine/presets';
+import { emptyCounts, type LibraryEntry, type Perspective } from '@/library/library';
 import { NetworkError, NotFoundError, RateLimitError } from '@/sources/http';
+import type { AnalysisState } from './useGameReview';
 import {
   analysingMoveNumber,
   arrowsForMove,
@@ -10,6 +20,7 @@ import {
   contiguousCount,
   deeperPreset,
   deeperPresets,
+  describeAnalysis,
   describeLoadError,
   evalBarValueAt,
   evalTextAt,
@@ -19,11 +30,15 @@ import {
   isAbortError,
   isAnalysisComplete,
   isReviewableVariant,
+  libraryEntryToSave,
   mergeAnalyses,
   nextMoveNumber,
   progressPercent,
   progressText,
+  rebuildInterval,
+  resolvePerspective,
   resultLabel,
+  shallowerPresets,
 } from './reviewHelpers';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -156,6 +171,15 @@ describe('analysis bookkeeping', () => {
     expect(mergeAnalyses([memory, memory, memory], null, 2)).toHaveLength(2);
   });
 
+  it('rebuilds the review less often when a build is slow', () => {
+    expect(rebuildInterval(0, 750)).toBe(750);
+    expect(rebuildInterval(100, 750)).toBe(750);
+    // A 400 ms build on a slow phone: rebuilds take at most a quarter of the time.
+    expect(rebuildInterval(400, 750)).toBe(1600);
+    expect(rebuildInterval(400, 750, 5)).toBe(2000);
+    expect(rebuildInterval(Number.NaN, 750)).toBe(750);
+  });
+
   it('formats the time left', () => {
     expect(formatEta(2_000)).toBe('almost done');
     expect(formatEta(38_000)).toBe('about 40 s left');
@@ -284,5 +308,205 @@ describe('evalBarValueAt / evalTextAt', () => {
     expect(evalBarValueAt([mated], 0)).toEqual({ kind: 'final', whiteWinPercent: 0, label: '0-1' });
     const stalemate: PositionAnalysis = { ...mated, terminal: 'stalemate' };
     expect(evalTextAt([stalemate], 0)).toBe('½-½');
+  });
+});
+
+describe('shallowerPresets', () => {
+  it('lists the shallower presets, deepest first', () => {
+    expect(shallowerPresets('deep')).toEqual(['standard', 'fast']);
+    expect(shallowerPresets('standard')).toEqual(['fast']);
+    expect(shallowerPresets('fast')).toEqual([]);
+  });
+});
+
+describe('resolvePerspective', () => {
+  const players = { white: { name: 'MagnusCarlsen' }, black: { name: 'Hikaru' } };
+
+  it('takes the player named by ?as=, case-insensitively', () => {
+    expect(resolvePerspective({ id: 'lichess/abc', ...players }, 'hikaru')).toEqual({
+      platform: 'lichess',
+      username: 'hikaru',
+      color: 'b',
+    });
+    expect(resolvePerspective({ id: 'lichess/abc', ...players }, ' MAGNUSCARLSEN ')).toEqual({
+      platform: 'lichess',
+      username: 'magnuscarlsen',
+      color: 'w',
+    });
+  });
+
+  it('falls back to the archive owner of a Chess.com id', () => {
+    const id = 'chesscom/hikaru/2026/10/123';
+    expect(resolvePerspective({ id, ...players })).toEqual({
+      platform: 'chesscom',
+      username: 'hikaru',
+      color: 'b',
+    });
+    // An ?as= that matches nobody does not hide the owner.
+    expect(resolvePerspective({ id, ...players }, 'someone')?.color).toBe('b');
+    // ?as= wins over the owner when it names the other player.
+    expect(resolvePerspective({ id, ...players }, 'magnuscarlsen')?.color).toBe('w');
+  });
+
+  it('is null without a platform or a matching player', () => {
+    expect(resolvePerspective({ id: 'pgn/abc', ...players }, 'hikaru')).toBeNull();
+    expect(resolvePerspective({ id: 'lichess/abc', ...players }, 'nobody')).toBeNull();
+    expect(resolvePerspective({ id: 'lichess/abc', ...players }, '')).toBeNull();
+    expect(resolvePerspective({ id: 'lichess/abc', ...players })).toBeNull();
+  });
+});
+
+describe('libraryEntryToSave', () => {
+  const record: GameRecord = {
+    id: 'lichess/abc',
+    source: 'lichess',
+    white: { name: 'Alice' },
+    black: { name: 'Bob' },
+    result: '1-0',
+    timeClass: 'blitz',
+    variant: 'standard',
+    pgn: '1. e4 *',
+  };
+  const game: ParsedGame = { headers: {}, initialFen: START, moves: [parsedMove(1, 60)] };
+  const reviewAt = (depth: number): GameReview => ({
+    version: 2,
+    engine: { name: 'SF', depth, multiPv: 2 },
+    moves: [moveReview({ classification: 'best', winLoss: 0 })],
+    white: { accuracy: 100, counts: emptyCounts() },
+    black: { accuracy: 100, counts: emptyCounts() },
+    whiteWinPercents: [50, 50],
+    keyMoments: [],
+  });
+  const alice: Perspective = { platform: 'lichess', username: 'alice', color: 'w' };
+  const bob: Perspective = { platform: 'lichess', username: 'bob', color: 'b' };
+  const stored = (depth: number, perspective?: Perspective): LibraryEntry => ({
+    v: 1,
+    gameId: record.id,
+    record,
+    reviewedAt: 1000,
+    engine: { name: 'SF', depth, multiPv: 2 },
+    white: { accuracy: 90, counts: emptyCounts() },
+    black: { accuracy: 80, counts: emptyCounts() },
+    moves: [],
+    ...(perspective ? { perspective } : {}),
+  });
+
+  it('builds a new entry with the perspective', () => {
+    const entry = libraryEntryToSave(record, game, reviewAt(16), alice, null, 5000);
+    expect(entry).toMatchObject({ gameId: record.id, reviewedAt: 5000, perspective: alice });
+    expect(entry?.moves).toHaveLength(1);
+    expect(entry?.moves[0]).toMatchObject({ ply: 1, classification: 'best', clock: 60 });
+  });
+
+  it('keeps a stored perspective when the review has none', () => {
+    const entry = libraryEntryToSave(record, game, reviewAt(16), null, stored(12, bob), 5000);
+    expect(entry?.perspective).toEqual(bob);
+    expect(entry?.engine.depth).toBe(16);
+    expect(entry?.reviewedAt).toBe(5000);
+  });
+
+  it('keeps the first review date when the depth is unchanged', () => {
+    const entry = libraryEntryToSave(record, game, reviewAt(16), alice, stored(16), 5000);
+    expect(entry?.reviewedAt).toBe(1000);
+    expect(entry?.white.accuracy).toBe(100);
+  });
+
+  it('keeps a deeper stored entry, only adding a missing perspective', () => {
+    expect(libraryEntryToSave(record, game, reviewAt(16), alice, stored(20, bob))).toBeNull();
+    expect(libraryEntryToSave(record, game, reviewAt(16), null, stored(20))).toBeNull();
+    expect(libraryEntryToSave(record, game, reviewAt(16), alice, stored(20))).toEqual({
+      ...stored(20),
+      perspective: alice,
+    });
+  });
+});
+
+describe('describeAnalysis', () => {
+  const base: Pick<
+    AnalysisState,
+    'status' | 'phase' | 'progress' | 'passes' | 'preset' | 'phaseDepth' | 'refineMoves'
+  > = {
+    status: 'running',
+    phase: 'full',
+    progress: { done: 24, total: 82, etaMs: 40_000 },
+    passes: { quick: { done: 82, total: 82 }, full: { done: 24, total: 82 }, refining: null },
+    preset: PRESETS.standard,
+    phaseDepth: 16,
+    refineMoves: 0,
+  };
+  const describe81 = (patch: Partial<AnalysisState>, showingPreviousAnalysis = false) =>
+    describeAnalysis({ ...base, ...patch }, { totalMoves: 81, showingPreviousAnalysis });
+
+  it('says the quick review is ready while the full pass refines it', () => {
+    expect(describe81({})).toEqual({
+      title: 'Quick review ready',
+      detail: 'Refining at depth 16 · move 24 of 81 · about 40 s left',
+      announcement: 'Quick review ready. Refining at depth 16.',
+    });
+  });
+
+  it('describes the quick pass', () => {
+    const quick = describe81({
+      phase: 'quick',
+      phaseDepth: 8,
+      progress: { done: 10, total: 82, etaMs: 4000 },
+    });
+    expect(quick.title).toBe('Building a quick review');
+    expect(quick.detail).toBe('Quick pass · move 10 of 81 · almost done');
+  });
+
+  it('describes the verification pass', () => {
+    const refining = describe81({
+      phase: 'refining',
+      phaseDepth: 20,
+      refineMoves: 3,
+      progress: { done: 2, total: 5, etaMs: 30_000 },
+      passes: { ...base.passes, refining: { done: 2, total: 5 } },
+    });
+    expect(refining).toEqual({
+      title: 'Double-checking 3 key moves',
+      detail: 'Depth 20 · 2 of 5 positions · about 30 s left',
+      announcement: 'Review ready. Double-checking key moves.',
+    });
+    expect(describe81({ phase: 'refining', phaseDepth: 20, refineMoves: 1 }).title).toBe(
+      'Double-checking 1 key move',
+    );
+  });
+
+  it('keeps the plain wording when there is no quick review', () => {
+    const plain = describe81({ passes: { ...base.passes, quick: null } });
+    expect(plain.title).toBe('Analysing with Stockfish');
+    expect(plain.detail).toBe('Analysing move 24 of 81 · about 40 s left');
+    const deeper = describe81({ passes: { ...base.passes, quick: null } }, true);
+    expect(deeper.title).toBe('Analysing with Stockfish · standard analysis');
+  });
+
+  it('explains each paused pass', () => {
+    expect(describe81({ status: 'paused' })).toMatchObject({
+      title: 'Refinement paused',
+      announcement: 'Analysis paused.',
+    });
+    expect(describe81({ status: 'paused' }).detail).toContain('23 of 81 moves refined');
+    expect(describe81({ status: 'paused', phase: 'quick' }).detail).toContain(
+      '23 of 81 moves in the quick review',
+    );
+    expect(
+      describe81({
+        status: 'paused',
+        phase: 'refining',
+        phaseDepth: 20,
+        passes: { ...base.passes, refining: { done: 2, total: 6 } },
+      }).detail,
+    ).toBe('The review is complete. 2 of 6 positions re-checked at depth 20.');
+    expect(describe81({ status: 'paused' }, true).title).toBe('Deeper analysis paused');
+  });
+
+  it('covers preparing, failure and the finished state', () => {
+    expect(describe81({ status: 'preparing' }).title).toBe('Preparing analysis');
+    expect(describe81({ status: 'failed', message: 'worker crashed' })).toMatchObject({
+      title: 'Analysis stopped unexpectedly',
+      detail: 'worker crashed',
+    });
+    expect(describe81({ status: 'done', phase: 'done' }).announcement).toBe('Analysis finished.');
   });
 });

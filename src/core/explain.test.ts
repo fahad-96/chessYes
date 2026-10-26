@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { describeAdvantage, explainMove } from './explain';
 import type { ExplainInput } from './explain';
 import { detectSacrifice } from './material';
+import { describeLine } from './tactics';
 import { fenAfterUci, legalMoveCount, pvToSan, sideToMove, uciToSan } from './notation';
 import type { Score, SuggestedLine } from './types';
 import { scoreToWinPercent, winPercentFor } from './winPercent';
@@ -441,6 +442,226 @@ describe('explainMove: robustness', () => {
     expect(explainMove(input)).toBe(
       'Blunder. You were slightly better, but now your opponent is clearly better. ' +
         'Best was e4, keeping a slight edge.',
+    );
+  });
+});
+
+describe('explainMove: leading with the story of the line', () => {
+  /** The user's game fahadkmr - JJose8 (Chess.com, 2026), Stockfish 19 lite lines. */
+  const BEFORE_31 = '7R/1R4p1/3k1p1p/4p3/p7/1b4P1/r4P1P/6K1 w - - 2 31';
+  const BXG8 = 'b3g8 g1f1 g8c4 f1e1 a4a3 b7a7 d6c5 a7c7 c5b4 c7c8 c4d5 c8b8';
+  const RXG7 = 'b7g7 b3d5 h8d8 d6c5 f2f4 d5c6 f4e5 f6e5 d8c8 a2c2 g7g6 c5b6';
+  const ROYAL_FORK = 'r5k1/pppq1p1p/6p1/3N4/8/8/PPP2PPP/3Q2K1 w - - 0 1';
+  const FORK_LINE = 'd5f6 g8g7 f6d7 a8d8 d7c5 b7b6';
+
+  /** Adds the stories review.ts would attach, from the input's own lines. */
+  function withStories(input: ExplainInput, kind: 'error' | 'idea'): ExplainInput {
+    const player = input.color;
+    if (kind === 'idea') {
+      const pv = [input.uci, ...(input.playedLine?.pvUci ?? [])];
+      return { ...input, why: describeLine(input.fenBefore, pv, { kind: 'idea', player }) };
+    }
+    const why = input.playedLine
+      ? describeLine(input.fenAfter, input.playedLine.pvUci, {
+          kind: 'refutation',
+          player,
+          reviewedSan: input.san,
+          startFen: input.fenBefore,
+        })
+      : undefined;
+    const bestIdea = input.best
+      ? describeLine(input.fenBefore, input.best.pvUci, { kind: 'missed', player })
+      : undefined;
+    return { ...input, why, bestIdea };
+  }
+
+  it('shows why 31.Rg8?? is a blunder and what 31.Rxg7 would have won', () => {
+    const input = setup({
+      classification: 'blunder',
+      fenBefore: BEFORE_31,
+      uci: 'h8g8',
+      best: line(BEFORE_31, RXG7, cp(0)),
+      evalAfter: cp(-727),
+      reply: BXG8,
+    });
+    expect(explainMove(withStories(input, 'error'))).toBe(
+      'Blunder. This leaves your rook on g8 unprotected: Bxg8 takes it for free. ' +
+        'Best was Rxg7, which wins the undefended pawn on g7.',
+    );
+    // Without the stories the explanation still names the hanging rook.
+    expect(explainMove(input)).toBe(
+      'Blunder. This hangs your rook on g8: Bxg8 wins it. Best was Rxg7, which wins a pawn.',
+    );
+  });
+
+  it('names the fork the opponent gets (...c6?? Nc7+)', () => {
+    const fenBefore = 'r3k3/ppp2ppp/8/1N6/8/8/PPP2PPP/4K3 b - - 0 1';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'c7c6',
+      best: line(fenBefore, 'a7a6 b5c3 e8d7', cp(0)),
+      evalAfter: cp(450),
+      reply: 'b5c7 e8d7 c7a8 d7c8',
+    });
+    expect(explainMove(withStories(input, 'error'))).toBe(
+      'Blunder. Your opponent replies Nc7+, forking your king and rook, and wins the rook. ' +
+        'Best was a6, keeping the position equal.',
+    );
+  });
+
+  it('names the tactic that was missed', () => {
+    const input = setup({
+      classification: 'mistake',
+      fenBefore: ROYAL_FORK,
+      uci: 'g2g3',
+      best: line(ROYAL_FORK, FORK_LINE, cp(900)),
+      evalAfter: cp(80),
+      reply: 'd7d6 d5f4 a8e8',
+    });
+    expect(explainMove(withStories(input, 'error'))).toBe(
+      'Mistake. You missed Nf6+, which forks the king and queen and wins the queen.',
+    );
+  });
+
+  it('spells out a short mate the move allows or misses', () => {
+    const fenBefore = '2r3k1/p4ppp/8/8/8/8/P4PPP/3R2K1 w - - 0 1';
+    const allows = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'd1d7',
+      best: line(fenBefore, 'g2g3 g7g6 d1d7 a7a5', cp(22)),
+      evalAfter: mate(-2),
+      reply: 'c8c1 d7d1 c1d1',
+    });
+    expect(explainMove(withStories(allows, 'error'))).toBe(
+      'Blunder. This allows a back-rank mate: Rc1+ Rd1 Rxd1#. ' +
+        'Best was g3, keeping the position equal.',
+    );
+
+    const misses = setup({
+      classification: 'blunder',
+      fenBefore: OPERA.before16,
+      uci: 'b3a4',
+      best: line(OPERA.before16, 'b3b8 d7b8 d1d8', mate(2)),
+      evalAfter: cp(300),
+      reply: 'f8e7 g5e7 e8e7',
+    });
+    expect(explainMove(withStories(misses, 'error'))).toBe(
+      'Blunder. You had mate in 2: Qb8+ Nxb8 Rd8#.',
+    );
+  });
+
+  it('keeps the engine mate count when the mating line is too long to show (53...Bxc4)', () => {
+    const fenBefore = '5K2/5bp1/5pkp/8/2R5/4p1P1/8/4r3 b - - 5 53';
+    const mating =
+      'f7c4 g3g4 e3e2 g4g5 e1b1 f8e7 e2e1q e7d7 e1e6 d7c7 e6e5 c7c6 e5d5 c6c7 b1b7 c7c8 d5d7';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'e3e2',
+      best: line(fenBefore, mating, mate(-9)),
+      evalAfter: cp(-690),
+      reply: 'c4g4 g6f5 g4g7 f7e6 g3g4 f5e5 g7g6',
+    });
+    expect(explainMove(withStories(input, 'error'))).toBe(
+      'Blunder. You had a forced mate in 9, starting with Bxc4.',
+    );
+  });
+
+  it('does not count taking back as material won (6...Bxc3 7.bxc3)', () => {
+    const fenBefore = 'rnbqk1nr/ppp2ppp/8/4p3/1b6/2N3P1/PPPPNPBP/R1BQK2R b KQkq - 2 6';
+    const input = setup({
+      classification: 'inaccuracy',
+      fenBefore,
+      uci: 'b4c3',
+      best: line(fenBefore, 'b8c6 a2a3 b4c3 e2c3 g8e7 d2d3 h7h5 c1e3', cp(17)),
+      evalAfter: cp(89),
+      reply: 'b2c3 b8c6 e1g1 g8e7 d2d4 c8e6 d4e5 e6d5 f2f4 e8g8 d1d3 d5g2',
+    });
+    expect(explainMove(withStories(input, 'error'))).toBe(
+      'Inaccuracy. After bxc3 and a few more moves, dxe5 wins a pawn. ' +
+        'Best was Nc6, keeping the position equal.',
+    );
+  });
+
+  it('tells the idea behind a brilliant sacrifice (16.Qb8+)', () => {
+    const input = setup({
+      classification: 'brilliant',
+      fenBefore: OPERA.before16,
+      uci: 'b3b8',
+      evalAfter: mate(1),
+      reply: 'd7b8 d1d8',
+      sacrifice: detectSacrifice(OPERA.before16, 'b3b8') ?? undefined,
+    });
+    expect(explainMove(withStories(input, 'idea'))).toBe(
+      'Brilliant! You sacrifice the queen on b8: after Nxb8, Rd8# is checkmate.',
+    );
+  });
+
+  it('keeps the offer wording when the line does not take the sacrifice (Legal: 5.Nxe5)', () => {
+    const fenBefore = 'rn1qkbnr/ppp2p1p/3p2p1/4p3/2B1P1b1/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 5';
+    const input = setup({
+      classification: 'brilliant',
+      fenBefore,
+      uci: 'f3e5',
+      evalAfter: cp(217),
+      reply: 'd6e5 d1g4 b8c6 g4g3 f8g7 d2d3 c6d4 e1d1 h7h5 a2a4',
+      sacrifice: detectSacrifice(fenBefore, 'f3e5') ?? undefined,
+    });
+    expect(explainMove(withStories(input, 'idea'))).toBe(
+      'Brilliant! You offer your queen on d1. ' +
+        'Your opponent does best not to take it, and you are clearly better.',
+    );
+  });
+
+  it('tells the tactic behind a great, best or excellent move', () => {
+    const before25 = '5k2/p2R1bpp/5p2/4p3/8/1P4P1/r4P1P/4R1K1 w - - 0 25';
+    const great = setup({
+      classification: 'great',
+      fenBefore: before25,
+      uci: 'e1c1',
+      best: line(before25, 'e1c1 f7e8 c1c8 e5e4', cp(446)),
+      secondBest: line(before25, 'd7d8 f8e7 d8b8 e7d6', cp(60)),
+      evalAfter: cp(446),
+      reply: 'f7e8 c1c8 e5e4 d7d8 f6f5 d8e8 f8f7',
+    });
+    expect(explainMove(withStories(great, 'idea'))).toBe(
+      'Great move! After Rc1 Be8, Rc8 pins the bishop to the king and wins the bishop. ' +
+        'It is the only move that keeps your advantage.',
+    );
+
+    const best = setup({
+      classification: 'best',
+      fenBefore: ROYAL_FORK,
+      uci: 'd5f6',
+      evalAfter: cp(900),
+      reply: 'g8g7 f6d7 a8d8',
+    });
+    expect(explainMove(withStories(best, 'idea'))).toBe(
+      'Best move. Nf6+ forks the king and queen and wins the queen.',
+    );
+    const excellent: ExplainInput = {
+      ...best,
+      classification: 'excellent',
+      best: line(ROYAL_FORK, 'd1d4', cp(950)),
+    };
+    expect(explainMove(withStories(excellent, 'idea'))).toBe(
+      'Excellent move. Nf6+ forks the king and queen and wins the queen. ' +
+        'Qd4 was slightly stronger.',
+    );
+  });
+
+  it('falls back to the plain explanation when the line shows nothing concrete', () => {
+    const input = setup({
+      classification: 'best',
+      fenBefore: OPERA.before16,
+      uci: 'b3b8',
+      evalAfter: mate(1),
+    });
+    const neutral = describeLine(AFTER_1E4_E5_2NF3, ['b8c6'], { kind: 'idea', player: 'b' });
+    expect(explainMove({ ...input, why: neutral })).toBe(
+      'Best move. Mate follows on the next move.',
     );
   });
 });

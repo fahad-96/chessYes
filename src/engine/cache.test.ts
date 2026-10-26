@@ -1,7 +1,13 @@
 import { createStore, get, set } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PositionAnalysis } from '@/core/types';
-import { analysisCacheKey, clearAnalysisCache, loadAnalyses, saveAnalyses } from './cache';
+import {
+  analysisCacheKey,
+  clearAnalysisCache,
+  loadAnalyses,
+  loadCachedAnalyses,
+  saveAnalyses,
+} from './cache';
 
 const settings = { depth: 16, multiPv: 2, maxTimeMs: 4000 };
 
@@ -56,6 +62,15 @@ describe('analysis cache', () => {
     expect(await loadAnalyses(key)).toEqual([start, null, mated]);
   });
 
+  it('keeps the analysis a verified one replaced, and rejects anything nested deeper', async () => {
+    const verified: PositionAnalysis = { ...start, depth: 20, unverified: start };
+    await saveAnalyses('verified', [verified, null, mated]);
+    expect(await loadAnalyses('verified')).toEqual([verified, null, mated]);
+    const nested = { ...verified, unverified: verified };
+    await saveAnalyses('nested', [nested]);
+    expect(await loadAnalyses('nested')).toBeNull();
+  });
+
   it('turns holes in sparse arrays into null', async () => {
     const key = 'sparse';
     const sparse: (PositionAnalysis | null)[] = [];
@@ -76,6 +91,26 @@ describe('analysis cache', () => {
     expect(raw.savedAt).toBeGreaterThanOrEqual(before);
   });
 
+  it('records whether the analyses were verified', async () => {
+    await saveAnalyses('plain', [start]);
+    await saveAnalyses('verified', [start, mated], { refined: true });
+    expect(await loadCachedAnalyses('plain')).toEqual({ analyses: [start], refined: false });
+    expect(await loadCachedAnalyses('verified')).toEqual({
+      analyses: [start, mated],
+      refined: true,
+    });
+    expect(await get('plain', rawStore)).not.toHaveProperty('refined');
+    // Saving again without the flag (new analyses) clears it.
+    await saveAnalyses('verified', [start]);
+    expect((await loadCachedAnalyses('verified'))?.refined).toBe(false);
+    expect(await loadCachedAnalyses('missing')).toBeNull();
+  });
+
+  it('reads entries saved before verification existed as not verified', async () => {
+    await set('old', { v: 2, savedAt: 1, analyses: [start] }, rawStore);
+    expect(await loadCachedAnalyses('old')).toEqual({ analyses: [start], refined: false });
+  });
+
   it('rejects stored data with the wrong shape', async () => {
     const cases: [string, unknown][] = [
       ['not-an-object', 'hello'],
@@ -93,6 +128,7 @@ describe('analysis cache', () => {
         },
       ],
       ['bad-terminal', { v: 2, savedAt: 1, analyses: [{ ...mated, terminal: 'resigned' }] }],
+      ['bad-refined', { v: 2, savedAt: 1, analyses: [start], refined: 'yes' }],
     ];
     for (const [key, value] of cases) {
       await set(key, value, rawStore);
@@ -115,6 +151,7 @@ describe('analysis cache', () => {
     const cache = await import('./cache');
     await expect(cache.saveAnalyses('k', [start])).resolves.toBeUndefined();
     await expect(cache.loadAnalyses('k')).resolves.toBeNull();
+    await expect(cache.loadCachedAnalyses('k')).resolves.toBeNull();
     await expect(cache.clearAnalysisCache()).resolves.toBeUndefined();
   });
 });

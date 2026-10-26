@@ -1,9 +1,9 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { GameRecord } from '@/core/types';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
-import { formatGameDate, formatTimeClass, formatTimeControl } from '@/lib/format';
+import { formatAccuracy, formatGameDate, formatTimeClass, formatTimeControl } from '@/lib/format';
 import { isReviewable, outcomeForPlayer, reviewPath, sides, type PlayerOutcome } from './gameList';
 import { TIME_CLASS_ICONS } from './timeClassIcons';
 
@@ -14,8 +14,16 @@ const OUTCOME_STYLES: Record<PlayerOutcome, { label: string; className: string }
   unknown: { label: '—', className: 'bg-surface-3 text-muted' },
 };
 
+export interface GameRowProps {
+  game: GameRecord;
+  /** The player whose list this is; the review link opens the game from their side. */
+  username: string;
+  /** The player's accuracy when the game is already reviewed (in the library). */
+  accuracy?: number;
+}
+
 /** One game in the list. The whole row links to the review; other variants are disabled. */
-export function GameRow({ game, username }: { game: GameRecord; username: string }) {
+export function GameRow({ game, username, accuracy }: GameRowProps) {
   const outcome = outcomeForPlayer(game, username);
   const { me, opponent, color } = sides(game, username);
   const reviewable = isReviewable(game);
@@ -77,6 +85,16 @@ export function GameRow({ game, username }: { game: GameRecord; username: string
       >
         {game.openingName}
       </p>
+      {accuracy !== undefined && (
+        <span
+          title={`${username}'s accuracy in this reviewed game`}
+          className="tabular inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-surface-2 px-1.5 text-xs font-semibold text-text ring-1 ring-line"
+        >
+          <Target className="h-3 w-3 text-muted" aria-hidden="true" />
+          <span className="sr-only">Accuracy </span>
+          {formatAccuracy(accuracy)}
+        </span>
+      )}
       <span className="hidden w-24 shrink-0 text-right text-xs text-muted sm:block">{date}</span>
       {reviewable && (
         <ChevronRight
@@ -101,7 +119,7 @@ export function GameRow({ game, username }: { game: GameRecord; username: string
   }
   return (
     <Link
-      to={reviewPath(game.id)}
+      to={reviewPath(game.id, { as: username })}
       // The review page can use this to skip refetching the game it was opened from.
       state={{ record: game }}
       className={cn(base, 'group transition-colors hover:border-muted/40 hover:bg-surface-2')}

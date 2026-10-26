@@ -1,0 +1,27 @@
+/*
+ * Chart colours for the insights page. Charts use one emphasised series (blue) against a
+ * de-emphasised context grey, checked against the app's surfaces (--surface) for contrast and
+ * colour-vision separation. Dark is the app's default theme; light follows index.css.
+ * Results keep the app's own win/draw/loss colours (--success, --muted, --danger), always
+ * next to their numbers and in a fixed order (wins left, losses right).
+ */
+.kb-viz {
+  --viz-series: #3987e5;
+  --viz-series-wash: rgb(57 135 229 / 0.12);
+  --viz-context: #66717e;
+  --viz-grid: var(--line);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .kb-viz {
+    --viz-series: #2a78d6;
+    --viz-series-wash: rgb(42 120 214 / 0.1);
+    --viz-context: #8592a0;
+  }
+}
+
+:root[data-theme='light'] .kb-viz {
+  --viz-series: #2a78d6;
+  --viz-series-wash: rgb(42 120 214 / 0.1);
+  --viz-context: #8592a0;
+}

@@ -1,4 +1,5 @@
 import type { Color, GameRecord, PlayerInfo, TimeClass } from '@/core/types';
+import type { Platform } from '@/state/settings';
 
 /** Result of a game from the searched player's point of view. */
 export type PlayerOutcome = 'win' | 'loss' | 'draw' | 'unknown';
@@ -151,7 +152,29 @@ export function groupByMonth(games: readonly GameRecord[]): MonthGroup[] {
   return groups;
 }
 
-/** Route of a game review. Each id segment is encoded but the slashes are kept. */
-export function reviewPath(id: string): string {
-  return `/review/${id.split('/').map(encodeURIComponent).join('/')}`;
+export interface ReviewLinkOptions {
+  /** Whose game it is: the review shows it from this player's side (`?as=`). */
+  as?: string;
+  /** Opens the review at this ply (`?ply=`). */
+  ply?: number;
+}
+
+/**
+ * Route of a game review. Each id segment is encoded but the slashes are kept; `as` and
+ * `ply` become query parameters, e.g. /review/lichess/abc?as=DrNykterstein&ply=31.
+ */
+export function reviewPath(id: string, options: ReviewLinkOptions = {}): string {
+  const path = `/review/${id.split('/').map(encodeURIComponent).join('/')}`;
+  const query = new URLSearchParams();
+  if (options.as) query.set('as', options.as);
+  if (options.ply !== undefined && Number.isInteger(options.ply) && options.ply >= 0) {
+    query.set('ply', String(options.ply));
+  }
+  const search = query.toString();
+  return search ? `${path}?${search}` : path;
+}
+
+/** Route of a player's insights page, e.g. /insights/chesscom/Hikaru. */
+export function insightsPath(platform: Platform, username: string): string {
+  return `/insights/${platform}/${encodeURIComponent(username.trim())}`;
 }

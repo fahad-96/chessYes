@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Play, Telescope } from 'lucide-react';
+import { ChevronDown, ChevronUp, GraduationCap, Play, Telescope } from 'lucide-react';
 import { CLASSIFICATIONS } from '@/core/types';
 import type { Classification, GameRecord, GameReview, PlayerReview } from '@/core/types';
 import { ClassificationIcon } from '@/components/ClassificationIcon';
@@ -64,6 +64,11 @@ export interface SummaryCardProps {
   canAnalyseDeeper: boolean;
   onAnalyseDeeper: () => void;
   engineLabel: string;
+  /** Number of moves "Learn from your mistakes" would go through. */
+  learnCount?: number;
+  /** Whose mistakes: the player's own (a perspective is known) or both players'. */
+  learnScope?: 'yours' | 'both';
+  onLearn?: () => void;
   className?: string;
 }
 
@@ -78,6 +83,9 @@ export function SummaryCard({
   canAnalyseDeeper,
   onAnalyseDeeper,
   engineLabel,
+  learnCount = 0,
+  learnScope = 'yours',
+  onLearn,
   className,
 }: SummaryCardProps) {
   const [showAll, setShowAll] = useState(false);
@@ -156,6 +164,24 @@ export function SummaryCard({
         <p className="text-sm text-muted">
           Accuracy and move ratings appear here as soon as the first moves are analysed.
         </p>
+      )}
+
+      {onLearn && learnCount > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <GraduationCap aria-hidden="true" className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Learn from your mistakes</p>
+            <p className="text-xs text-muted">
+              {learnCount} {learnCount === 1 ? 'move' : 'moves'} to retry
+              {learnScope === 'both' ? ', both players' : ''}
+            </p>
+          </div>
+          <Button size="sm" onClick={onLearn} className="h-10 shrink-0 sm:h-8">
+            Start
+          </Button>
+        </div>
       )}
 
       {(atStart || canAnalyseDeeper) && (

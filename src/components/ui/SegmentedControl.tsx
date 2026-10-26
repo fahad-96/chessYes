@@ -83,7 +83,8 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.value)}
             className={cn(
               'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors',
-              size === 'sm' ? 'h-8 px-2.5 text-sm' : 'h-9 px-3.5 text-sm',
+              // At least 40px tall where fingers tap; tighter on larger screens.
+              size === 'sm' ? 'h-10 px-2.5 text-sm sm:h-8' : 'h-10 px-3.5 text-sm sm:h-9',
               fullWidth && 'flex-1',
               selected
                 ? 'bg-accent/15 text-text ring-1 ring-accent/50'

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { GameRecord, GameReview, PlayerInfo } from '@/core/types';
 import { formatGameDate, formatTimeClass, formatTimeControl } from '@/lib/format';
@@ -32,6 +33,8 @@ export interface ReviewHeaderProps {
   review: GameReview | null;
   /** Phone layout: one line of details (the player strips already show names and ratings). */
   compact?: boolean;
+  /** Buttons at the end of the title row, e.g. the Share menu. */
+  actions?: ReactNode;
 }
 
 function OriginalGameLink({ url, short }: { url: string; short: boolean }) {
@@ -50,7 +53,7 @@ function OriginalGameLink({ url, short }: { url: string; short: boolean }) {
 }
 
 /** Players, result and game details above the board. */
-export function ReviewHeader({ record, review, compact = false }: ReviewHeaderProps) {
+export function ReviewHeader({ record, review, compact = false, actions }: ReviewHeaderProps) {
   const opening =
     review?.opening ??
     (record.openingName ? { eco: record.eco ?? '', name: record.openingName } : null);
@@ -78,6 +81,7 @@ export function ReviewHeader({ record, review, compact = false }: ReviewHeaderPr
             {record.black.name}
           </h1>
           {result}
+          {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
         </div>
         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
           <span className="min-w-0 truncate" title={details.join(' · ')}>
@@ -98,6 +102,7 @@ export function ReviewHeader({ record, review, compact = false }: ReviewHeaderPr
           <PlayerName player={record.black} color="b" />
         </h1>
         {result}
+        {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted">
         {details.map((item, index) => (

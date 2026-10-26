@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export type ReviewShortcut = 'prev' | 'next' | 'first' | 'last' | 'flip';
+export type ReviewShortcut = 'prev' | 'next' | 'first' | 'last' | 'flip' | 'exit' | 'play';
 
 /** Maps a KeyboardEvent.key to a review shortcut. */
 export function shortcutForKey(key: string): ReviewShortcut | null {
@@ -16,6 +16,10 @@ export function shortcutForKey(key: string): ReviewShortcut | null {
     case 'f':
     case 'F':
       return 'flip';
+    case 'Escape':
+      return 'exit';
+    case ' ':
+      return 'play';
     default:
       return null;
   }
@@ -31,12 +35,34 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+/** True for controls that Space activates by itself (buttons, links, switches, sliders). */
+export function isSpaceTarget(target: EventTarget | null): boolean {
+  const element = target as Partial<HTMLElement> | null;
+  return (
+    typeof element?.closest === 'function' &&
+    !!element.closest('button,a[href],summary,[role="button"],[role="switch"],[role="slider"]')
+  );
+}
+
+/** True inside a dialog or menu, which handle their own keys (Escape closes them). */
+function inPopup(target: EventTarget | null): boolean {
+  const element = target as Partial<HTMLElement> | null;
+  return (
+    typeof element?.closest === 'function' && !!element.closest('[role="dialog"],[role="menu"]')
+  );
+}
+
 /**
- * Global review shortcuts: ← → step through moves, Home / End jump, F flips the board.
- * Ignored while typing, with modifier keys held, or when a focused widget (such as the
- * eval graph slider) already handled the key.
+ * Global review shortcuts: ← → step through moves, Home / End jump, F flips the board,
+ * Space plays or pauses a line, Escape leaves a variation or a retry. Ignored while typing, inside dialogs and menus,
+ * with modifier keys held, or when a focused widget (such as the eval graph slider)
+ * already handled the key. A handler that returns false leaves the key's default alone.
  */
-export function useReviewKeyboard(handlers: Record<ReviewShortcut, () => void>) {
+export function useReviewKeyboard(
+  handlers: Record<Exclude<ReviewShortcut, 'play'>, () => void | boolean> & {
+    play?: () => void | boolean;
+  },
+) {
   const handlersRef = useRef(handlers);
 
   useEffect(() => {
@@ -46,11 +72,12 @@ export function useReviewKeyboard(handlers: Record<ReviewShortcut, () => void>) 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (isEditableTarget(event.target)) return;
+      if (isEditableTarget(event.target) || inPopup(event.target)) return;
       const shortcut = shortcutForKey(event.key);
       if (!shortcut) return;
-      event.preventDefault();
-      handlersRef.current[shortcut]();
+      if (shortcut === 'play' && isSpaceTarget(event.target)) return;
+      const handler = handlersRef.current[shortcut];
+      if (handler && handler() !== false) event.preventDefault();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeft, ExternalLink, RefreshCw, SearchX, TriangleAlert, UserX } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChartLine,
+  ExternalLink,
+  RefreshCw,
+  SearchX,
+  TriangleAlert,
+  UserX,
+} from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/Badge';
 import { Button, buttonClass } from '@/components/ui/Button';
@@ -22,9 +30,11 @@ import {
   filterGames,
   formatMonth,
   groupByMonth,
+  insightsPath,
   type GameFilters,
 } from './gameList';
 import { cacheKey, loadErrorMessage, type GameListData, type PlayerProfile } from './playerGames';
+import { useLibraryAccuracies } from './useLibraryAccuracies';
 import { usePlayerGames, type PlayerGamesState } from './usePlayerGames';
 
 /** Rows rendered at a time; very active players can have thousands of games a month. */
@@ -142,54 +152,67 @@ function ProfileHeader({ profile, onRefresh }: { profile: PlayerProfile; onRefre
   const [avatarFailed, setAvatarFailed] = useState(false);
   const showAvatar = profile.avatar && !avatarFailed;
   return (
-    <div className="flex items-center gap-3 sm:gap-4">
-      {showAvatar ? (
-        <img
-          src={profile.avatar}
-          alt=""
-          width={56}
-          height={56}
-          referrerPolicy="no-referrer"
-          onError={() => setAvatarFailed(true)}
-          className="h-14 w-14 shrink-0 rounded-xl border border-line bg-surface-2 object-cover"
-        />
-      ) : (
-        <span
-          aria-hidden="true"
-          className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2 text-xl font-bold text-muted uppercase"
-        >
-          {profile.username.slice(0, 1)}
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          {profile.title && <Badge tone="accent">{profile.title}</Badge>}
-          <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">
-            {profile.username}
-          </h1>
-        </div>
-        <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-muted">
-          {profile.name && <span className="truncate">{profile.name}</span>}
-          <a
-            href={profile.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 underline-offset-4 hover:text-text hover:underline"
+    // The actions wrap under the name on narrow phones instead of squeezing it.
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 sm:gap-x-4">
+      <div className="flex min-w-0 flex-1 basis-60 items-center gap-3 sm:gap-4">
+        {showAvatar ? (
+          <img
+            src={profile.avatar}
+            alt=""
+            width={56}
+            height={56}
+            referrerPolicy="no-referrer"
+            onError={() => setAvatarFailed(true)}
+            className="h-14 w-14 shrink-0 rounded-xl border border-line bg-surface-2 object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2 text-xl font-bold text-muted uppercase"
           >
-            Profile on {PLATFORM_LABELS[profile.platform]}
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          </a>
-        </p>
+            {profile.username.slice(0, 1)}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            {profile.title && <Badge tone="accent">{profile.title}</Badge>}
+            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">
+              {profile.username}
+            </h1>
+          </div>
+          <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-muted">
+            {profile.name && <span className="truncate">{profile.name}</span>}
+            <a
+              href={profile.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline-offset-4 hover:text-text hover:underline"
+            >
+              Profile on {PLATFORM_LABELS[profile.platform]}
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+          </p>
+        </div>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onRefresh}
-        aria-label="Reload games"
-        title="Reload games"
-      >
-        <RefreshCw className="h-[18px] w-[18px]" aria-hidden="true" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Link
+          to={insightsPath(profile.platform, profile.username)}
+          className={buttonClass('secondary', 'md')}
+          title="Results, openings and accuracy across your games"
+        >
+          <ChartLine className="h-4 w-4" aria-hidden="true" />
+          Insights
+        </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onRefresh}
+          aria-label="Reload games"
+          title="Reload games"
+        >
+          <RefreshCw className="h-[18px] w-[18px]" aria-hidden="true" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -219,7 +242,9 @@ function GameList({ data, state, view, onViewChange, onLoadMore, onRetry }: Game
     () => filterGames(data.games, username, effective),
     [data.games, username, effective],
   );
-  const groups = useMemo(() => groupByMonth(visible.slice(0, limit)), [visible, limit]);
+  const shown = useMemo(() => visible.slice(0, limit), [visible, limit]);
+  const groups = useMemo(() => groupByMonth(shown), [shown]);
+  const accuracies = useLibraryAccuracies(shown, data.profile.platform, username);
   const hidden = Math.max(0, visible.length - limit);
   const onFiltersChange = (next: GameFilters) =>
     onViewChange({ filters: next, limit: RENDER_STEP });
@@ -269,7 +294,7 @@ function GameList({ data, state, view, onViewChange, onLoadMore, onRetry }: Game
           <ul className="space-y-2">
             {group.games.map((game) => (
               <li key={game.id}>
-                <GameRow game={game} username={username} />
+                <GameRow game={game} username={username} accuracy={accuracies.get(game.id)} />
               </li>
             ))}
           </ul>

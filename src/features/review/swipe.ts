@@ -38,8 +38,13 @@ export function detectSwipe(
  * Pointer handlers that report horizontal swipes from touch or pen input.
  * Pair them with `touch-action: pan-y` so vertical scrolling keeps working: the
  * browser then cancels the pointer (pointercancel) when the user scrolls.
+ * `shouldStart` can veto a gesture as it begins, e.g. one that drags a chess piece.
  */
-export function useSwipe(onSwipe: (direction: SwipeDirection) => void, options?: SwipeOptions) {
+export function useSwipe(
+  onSwipe: (direction: SwipeDirection) => void,
+  options?: SwipeOptions,
+  shouldStart?: (event: PointerEvent) => boolean,
+) {
   const startRef = useRef<(PointerSample & { id: number }) | null>(null);
   const minDistance = options?.minDistance;
   const maxDuration = options?.maxDuration;
@@ -49,6 +54,10 @@ export function useSwipe(onSwipe: (direction: SwipeDirection) => void, options?:
     () => ({
       onPointerDown(event: PointerEvent) {
         if (event.pointerType === 'mouse' || !event.isPrimary) return;
+        if (shouldStart && !shouldStart(event)) {
+          startRef.current = null;
+          return;
+        }
         startRef.current = {
           id: event.pointerId,
           x: event.clientX,
@@ -71,6 +80,6 @@ export function useSwipe(onSwipe: (direction: SwipeDirection) => void, options?:
         startRef.current = null;
       },
     }),
-    [onSwipe, minDistance, maxDuration, ratio],
+    [onSwipe, minDistance, maxDuration, ratio, shouldStart],
   );
 }

@@ -1,9 +1,10 @@
 import { gameAccuracy, moveAccuracy } from './accuracy';
 import { classifyMove } from './classify';
 import { explainMove } from './explain';
-import { detectSacrifice, isRegainedAtOnce, staticExchange } from './material';
+import { detectSacrifice, isRegainedAtOnce, materialBalance, staticExchange } from './material';
 import { isInCheck, legalMoveCount, pvToSan, sideToMove } from './notation';
 import type { OpeningBook, OpeningInfo } from './openings';
+import { describeLine, findMotifs, materialBaseline, type DescribeLineOptions } from './tactics';
 import { THRESHOLDS } from './thresholds';
 import {
   CLASSIFICATIONS,
@@ -11,6 +12,7 @@ import {
   type Color,
   type EngineLine,
   type GameReview,
+  type LineStory,
   type MoveReview,
   type ParsedGame,
   type ParsedMove,
@@ -23,7 +25,7 @@ import {
 import { positionWhiteWinPercent, scoreToWinPercent, winPercentFor } from './winPercent';
 
 /** Bump when GameReview's shape or the classification rules change. */
-export const REVIEW_FORMAT_VERSION = 2;
+export const REVIEW_FORMAT_VERSION = 4;
 
 /** Maximum number of key moments highlighted in a review. */
 export const MAX_KEY_MOMENTS = 8;
@@ -55,18 +57,17 @@ export function buildGameReview(
   const moves: MoveReview[] = [];
   for (let i = 0; i + 1 < positions.length; i++) {
     const move = game.moves[i];
-    const before = positions[i];
-    const whiteBefore = whiteWinPercents[i];
-    const whiteAfter = whiteWinPercents[i + 1];
-    const after = positions[i + 1];
-    if (!move || !before || !after || whiteBefore === undefined || whiteAfter === undefined) {
-      break;
-    }
+    const pair = judgedPair(positions[i], positions[i + 1]);
+    if (!move || !pair) break;
+    const [before, after] = pair;
+    const whiteBefore = positionWhiteWinPercent(before);
+    const whiteAfter = positionWhiteWinPercent(after);
     if (i < bookPlies && leavesBook(move, before, after, whiteBefore, whiteAfter)) bookPlies = i;
     moves.push(
       reviewMove({
         move,
         previousMove: game.moves[i - 1],
+        earlierMove: game.moves[i - 2],
         before,
         after,
         whiteBefore,
@@ -103,6 +104,8 @@ export function buildGameReview(
 interface ReviewMoveInput {
   move: ParsedMove;
   previousMove: ParsedMove | undefined;
+  /** The move before `previousMove`. */
+  earlierMove: ParsedMove | undefined;
   before: PositionAnalysis;
   after: PositionAnalysis;
   /** White's win % in the positions before and after the move. */
@@ -113,7 +116,7 @@ interface ReviewMoveInput {
 }
 
 function reviewMove(input: ReviewMoveInput): MoveReview {
-  const { move, previousMove, before, after, inBook, book } = input;
+  const { move, previousMove, earlierMove, before, after, inBook, book } = input;
   const color = move.color;
   const winBefore = winPercentFor(input.whiteBefore, color);
   const winAfter = winPercentFor(input.whiteAfter, color);
@@ -163,6 +166,16 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
   const playedLine = suggestedLine(move.fenAfter, after.lines[0]);
   const evalAfter = after.lines[0]?.score ?? null;
   const opening = inBook ? openingAt(book, move.fenAfter) : undefined;
+  const baselineFor = tradeBaseline(move, previousMove, earlierMove);
+  const { why, bestIdea } = tellStories({
+    move,
+    previousMove,
+    classification,
+    best,
+    playedLine,
+    ideaBaseline: baselineFor(move.uci),
+    missedBaseline: baselineFor(best?.uci),
+  });
 
   const explanation = explainMove({
     classification,
@@ -181,6 +194,9 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
     sacrifice: sacrifice ?? undefined,
     opening,
     isCheckmate: move.isCheckmate,
+    why,
+    bestIdea,
+    baselineFen: baselineFor(best?.uci),
   });
 
   const review: MoveReview = {
@@ -203,8 +219,145 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
   if (secondBest) review.secondBest = secondBest;
   if (playedLine) review.playedLine = playedLine;
   if (sacrifice) review.sacrifice = sacrifice;
+  if (why) review.why = why;
+  if (bestIdea) review.bestIdea = bestIdea;
   if (opening) review.opening = opening;
   return review;
+}
+
+const ERRORS: ReadonlySet<Classification> = new Set([
+  'inaccuracy',
+  'mistake',
+  'blunder',
+  'missedWin',
+]);
+
+interface StoryInput {
+  move: ParsedMove;
+  previousMove: ParsedMove | undefined;
+  classification: Classification;
+  best: SuggestedLine | undefined;
+  playedLine: SuggestedLine | undefined;
+  /** Where the material of the move's idea and of the best move's line is counted from. */
+  ideaBaseline: string;
+  missedBaseline: string;
+}
+
+/**
+ * Where the material a line starting with a given move wins is counted from: the position
+ * before the opponent's last move when that move captured (starting an exchange rather
+ * than taking back) and the line's first move takes back on that square, so that taking
+ * back is not called winning material; otherwise the position before the move.
+ */
+function tradeBaseline(
+  move: ParsedMove,
+  previousMove: ParsedMove | undefined,
+  earlierMove: ParsedMove | undefined,
+): (firstUci: string | undefined) => string {
+  const startsTrade =
+    previousMove?.captured && !(earlierMove?.captured && earlierMove.to === previousMove.to);
+  return (firstUci) =>
+    startsTrade && previousMove && firstUci?.slice(2, 4) === previousMove.to
+      ? materialBaseline(move.fenBefore, previousMove.fenBefore, move.color)
+      : move.fenBefore;
+}
+
+/**
+ * The lines that show why a move got its label (see tactics.describeLine):
+ * - Inaccuracies, Mistakes, Blunders and Missed Wins: `why` is the opponent's refutation
+ *   (the engine line after the move) and `bestIdea` what the engine's move would have done.
+ * - Brilliant and Great moves: `why` is the idea, the move followed by the engine line.
+ * - Best and Excellent moves: the idea too, but only when the move itself sets up a
+ *   tactic that pays off in the line (a fork, a pin, a winning capture...).
+ * Book, Forced and Good moves, and checkmating moves, get no story.
+ */
+function tellStories(input: StoryInput): { why?: LineStory; bestIdea?: LineStory } {
+  const { move, previousMove, classification, best, playedLine } = input;
+  if (move.isCheckmate) return {};
+  const player = move.color;
+  // A capture just before the line makes taking back on that square a trade.
+  const recapture = previousMove?.captured ? previousMove.to : undefined;
+
+  if (ERRORS.has(classification)) {
+    const why = playedLine
+      ? story(move.fenAfter, playedLine.pvUci, {
+          kind: 'refutation',
+          player,
+          reviewedSan: move.san,
+          previousCaptureOn: move.captured ? move.to : undefined,
+          startFen: move.fenBefore,
+        })
+      : undefined;
+    const bestIdea =
+      best && best.uci !== move.uci
+        ? story(move.fenBefore, best.pvUci, {
+            kind: 'missed',
+            player,
+            previousCaptureOn: recapture,
+            startFen: input.missedBaseline,
+          })
+        : undefined;
+    return { why, bestIdea };
+  }
+
+  const ideaLine = [move.uci, ...(playedLine?.pvUci ?? [])];
+  const idea = () =>
+    story(move.fenBefore, ideaLine, {
+      kind: 'idea',
+      player,
+      previousCaptureOn: recapture,
+      startFen: input.ideaBaseline,
+    });
+  if (classification === 'brilliant' || classification === 'great') return { why: idea() };
+  if (classification === 'best' || classification === 'excellent') {
+    if (!hasMotif(move.fenBefore, move.uci)) return {};
+    const why = idea();
+    if (!why.motifs.some((motif) => motif.step === 0)) return {};
+    // Getting back material the mover was already down is no discovery.
+    const balance = materialBalance(input.ideaBaseline) * (player === 'w' ? 1 : -1);
+    return balance < 0 && balance + why.materialSwing <= 0 ? {} : { why };
+  }
+  return {};
+}
+
+/**
+ * Engine lines in SAN, stories and motif checks are memoised: buildGameReview runs again
+ * every time the streaming analysis adds a position, while earlier moves keep the same
+ * lines (replaying lines with chess.js is most of a review's cost). Each cache is keyed
+ * by everything the result depends on and bounded, oldest entries out first.
+ */
+const CACHE_SIZE = 2000;
+const storyCache = new Map<string, LineStory>();
+const motifCache = new Map<string, boolean>();
+const sanCache = new Map<string, string[]>();
+
+function story(fen: string, pv: string[], options: DescribeLineOptions): LineStory {
+  const key = [
+    options.kind,
+    options.player,
+    options.previousCaptureOn ?? '',
+    options.reviewedSan ?? '',
+    options.startFen ?? '',
+    fen,
+    pv.join(' '),
+  ].join('|');
+  return remember(storyCache, key, () => describeLine(fen, pv, options));
+}
+
+function hasMotif(fen: string, uci: string): boolean {
+  return remember(motifCache, `${fen}|${uci}`, () => findMotifs(fen, uci).length > 0);
+}
+
+function remember<T>(cache: Map<string, T>, key: string, compute: () => T): T {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const value = compute();
+  if (cache.size >= CACHE_SIZE) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, value);
+  return value;
 }
 
 /**
@@ -218,6 +371,25 @@ function realSacrifice(move: ParsedMove, after: PositionAnalysis): SacrificeInfo
   if (!sacrifice || !line) return sacrifice;
   const mates = (mateFor(line.score, move.color) ?? 0) > 0;
   return !mates && isRegainedAtOnce(move.fenBefore, move.uci, line.pv) ? null : sacrifice;
+}
+
+/**
+ * The analyses a move is judged by. The verification pass replaces some analyses with
+ * deeper ones (PositionAnalysis.unverified keeps the replaced one), and a position belongs
+ * to two moves: a move uses the verified analyses only when both of its positions were
+ * verified (a finished game needs no search, so it counts as verified), and otherwise the
+ * full pass's analyses of both, never a deeper search on one side and a shallower one on
+ * the other.
+ */
+function judgedPair(
+  before: PositionAnalysis | undefined,
+  after: PositionAnalysis | undefined,
+): [PositionAnalysis, PositionAnalysis] | null {
+  if (!before || !after) return null;
+  const verified = (analysis: PositionAnalysis) =>
+    analysis.unverified !== undefined || analysis.terminal !== undefined;
+  if (verified(before) && verified(after)) return [before, after];
+  return [before.unverified ?? before, after.unverified ?? after];
 }
 
 /**
@@ -303,7 +475,8 @@ function mateFor(score: Score | undefined, color: Color): number | undefined {
 /** A SuggestedLine for an engine line, or undefined when its first move is not legal. */
 function suggestedLine(fen: string, line: EngineLine | undefined): SuggestedLine | undefined {
   if (!line) return undefined;
-  const pvSan = pvToSan(fen, line.pv);
+  // A copy, so that no review shares (and could change) the cached array.
+  const pvSan = [...remember(sanCache, `${fen}|${line.pv.join(' ')}`, () => pvToSan(fen, line.pv))];
   const san = pvSan[0];
   const uci = line.pv[0];
   if (san === undefined || uci === undefined) return undefined;

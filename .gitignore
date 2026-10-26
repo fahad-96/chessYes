@@ -12,3 +12,5 @@ public/engine
 
 # Local tool settings
 .claude/
+# Copied from node_modules/@huggingface/transformers by scripts/copy-engine.mjs
+public/voice

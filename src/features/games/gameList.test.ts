@@ -148,4 +148,14 @@ describe('formatting and routes', () => {
     );
     expect(reviewPath('pgn/a#b?c')).toBe('/review/pgn/a%23b%3Fc');
   });
+
+  it('adds whose game it is and the ply as query parameters', () => {
+    expect(reviewPath('lichess/HqjDTU4A', { as: 'DrNykterstein' })).toBe(
+      '/review/lichess/HqjDTU4A?as=DrNykterstein',
+    );
+    expect(reviewPath('chesscom/hikaru/2026/10/1', { as: 'Hikaru', ply: 31 })).toBe(
+      '/review/chesscom/hikaru/2026/10/1?as=Hikaru&ply=31',
+    );
+    expect(reviewPath('lichess/x', { as: '', ply: -1 })).toBe('/review/lichess/x');
+  });
 });

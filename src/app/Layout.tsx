@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
-import { FileUp, Info, ScanSearch, Settings } from 'lucide-react';
+import { FileUp, Info, Puzzle, ScanSearch, Settings } from 'lucide-react';
 import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { GithubIcon } from '@/components/ui/GithubIcon';
 import { Logo } from '@/components/ui/Logo';
@@ -13,6 +13,8 @@ interface NavItem {
   icon: ComponentType<{ className?: string }>;
   /** Whether the current path belongs to this section. */
   matches: (pathname: string) => boolean;
+  /** Left out of the phone header (below 640px) to keep it from overflowing. */
+  hideOnPhones?: boolean;
 }
 
 const startsWith = (prefix: string) => (p: string) => p === prefix || p.startsWith(`${prefix}/`);
@@ -25,7 +27,15 @@ const NAV_ITEMS: NavItem[] = [
     // The review flow starts at home, so game lists and reviews count as "Review".
     matches: (p) => p === '/' || p.startsWith('/player/') || p.startsWith('/review/'),
   },
-  { to: '/import', label: 'Import PGN', icon: FileUp, matches: startsWith('/import') },
+  { to: '/puzzles', label: 'Puzzles', icon: Puzzle, matches: startsWith('/puzzles') },
+  {
+    to: '/import',
+    label: 'Import PGN',
+    icon: FileUp,
+    matches: startsWith('/import'),
+    // The home page links to the import, so phones can do without the icon.
+    hideOnPhones: true,
+  },
   { to: '/settings', label: 'Settings', icon: Settings, matches: startsWith('/settings') },
   { to: '/about', label: 'About', icon: Info, matches: startsWith('/about') },
 ];
@@ -84,13 +94,14 @@ function Header() {
                 className={cn(
                   // 40px tap targets on phones; compact once the labels show.
                   'inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors md:h-9 md:min-w-0 md:px-3',
+                  item.hideOnPhones && 'max-sm:hidden',
                   active
                     ? 'bg-surface-2 text-text'
                     : 'text-muted hover:bg-surface-2 hover:text-text',
                 )}
               >
                 <item.icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                {/* Icon-only on phones so the header never overflows at 360px. */}
+                {/* Icon-only on phones so the header never overflows, even at 320px. */}
                 <span className="sr-only md:not-sr-only">{item.label}</span>
               </Link>
             );

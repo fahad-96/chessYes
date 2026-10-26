@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, renderHook } from '@testing-library/react';
-import { isEditableTarget, shortcutForKey, useReviewKeyboard } from './keyboard';
+import { isEditableTarget, isSpaceTarget, shortcutForKey, useReviewKeyboard } from './keyboard';
 
 afterEach(cleanup);
 
@@ -13,6 +13,8 @@ describe('shortcutForKey', () => {
     expect(shortcutForKey('End')).toBe('last');
     expect(shortcutForKey('f')).toBe('flip');
     expect(shortcutForKey('F')).toBe('flip');
+    expect(shortcutForKey('Escape')).toBe('exit');
+    expect(shortcutForKey(' ')).toBe('play');
     expect(shortcutForKey('ArrowUp')).toBeNull();
   });
 });
@@ -28,9 +30,29 @@ describe('isEditableTarget', () => {
   });
 });
 
+describe('isSpaceTarget', () => {
+  it('detects controls that Space activates', () => {
+    const button = document.createElement('button');
+    const icon = document.createElement('span');
+    button.append(icon);
+    expect(isSpaceTarget(button)).toBe(true);
+    expect(isSpaceTarget(icon)).toBe(true);
+    expect(isSpaceTarget(document.body)).toBe(false);
+    expect(isSpaceTarget(null)).toBe(false);
+  });
+});
+
 describe('useReviewKeyboard', () => {
   function setup() {
-    const handlers = { prev: vi.fn(), next: vi.fn(), first: vi.fn(), last: vi.fn(), flip: vi.fn() };
+    const handlers = {
+      prev: vi.fn(),
+      next: vi.fn(),
+      first: vi.fn(),
+      last: vi.fn(),
+      flip: vi.fn(),
+      exit: vi.fn(() => false),
+      play: vi.fn(),
+    };
     renderHook(() => useReviewKeyboard(handlers));
     return handlers;
   }
@@ -62,5 +84,40 @@ describe('useReviewKeyboard', () => {
     expect(handlers.next).not.toHaveBeenCalled();
     expect(handlers.prev).not.toHaveBeenCalled();
     input.remove();
+  });
+
+  it('leaves the default alone when the handler declines the key', () => {
+    const handlers = setup();
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    expect(handlers.exit).toHaveBeenCalledOnce();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('plays with Space, except on a focused button', () => {
+    const handlers = setup();
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(space);
+    expect(handlers.play).toHaveBeenCalledOnce();
+    expect(space.defaultPrevented).toBe(true);
+    const button = document.createElement('button');
+    document.body.append(button);
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(handlers.play).toHaveBeenCalledOnce();
+    button.remove();
+  });
+
+  it('ignores keys inside dialogs and menus', () => {
+    const handlers = setup();
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    const item = document.createElement('button');
+    menu.append(item);
+    document.body.append(menu);
+    item.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    item.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(handlers.exit).not.toHaveBeenCalled();
+    expect(handlers.next).not.toHaveBeenCalled();
+    menu.remove();
   });
 });
