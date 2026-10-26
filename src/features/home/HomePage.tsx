@@ -1,0 +1,4 @@
+/** Placeholder page. */
+export default function HomePage() {
+  return <div className="p-6">HomePage</div>;
+}

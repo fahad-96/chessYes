@@ -1,0 +1,5 @@
+dist
+coverage
+public/engine
+src/core/openings/data/*.json
+LICENSE

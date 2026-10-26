@@ -1,0 +1,150 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Colours are CSS variables so light/dark themes swap in one
+ * place; Tailwind utilities (bg-surface, text-muted, border-line, ...) map to them.
+ * Theme: [data-theme="light"|"dark"] on <html>, falling back to the OS setting.
+ */
+:root {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --surface: #161c23;
+  --surface-2: #1d252e;
+  --surface-3: #252f3a;
+  --line: #2a343f;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #f2b544;
+  --accent-strong: #ffcb66;
+  --accent-fg: #1a1406;
+  --danger: #f2555a;
+  --success: #3fb950;
+
+  /* Board squares (default "slate" theme). */
+  --board-light: #e3e8ee;
+  --board-dark: #8fa3b8;
+
+  /* Eval bar / graph. */
+  --eval-white: #eef1f4;
+  --eval-black: #2b333c;
+
+  /* Move classifications. */
+  --c-brilliant: #26c2d9;
+  --c-great: #5b8def;
+  --c-best: #3fb950;
+  --c-excellent: #7cc46a;
+  --c-good: #a6b84a;
+  --c-book: #b08d6a;
+  --c-forced: #8b98a5;
+  --c-inaccuracy: #e8b730;
+  --c-mistake: #f0883e;
+  --c-blunder: #e5484d;
+  --c-missedWin: #d16bd8;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef1f5;
+    --surface-3: #e3e8ee;
+    --line: #dce2e8;
+    --text: #151a20;
+    --muted: #5d6874;
+    --accent: #c98a12;
+    --accent-strong: #a8720a;
+    --accent-fg: #ffffff;
+    --eval-black: #3a434d;
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --surface-3: #e3e8ee;
+  --line: #dce2e8;
+  --text: #151a20;
+  --muted: #5d6874;
+  --accent: #c98a12;
+  --accent-strong: #a8720a;
+  --accent-fg: #ffffff;
+  --eval-black: #3a434d;
+}
+
+/* Board themes (Settings → Board). */
+[data-board='walnut'] {
+  --board-light: #ecd9b9;
+  --board-dark: #b08862;
+}
+[data-board='ocean'] {
+  --board-light: #dbe7f0;
+  --board-dark: #5f87a8;
+}
+[data-board='slate'] {
+  --board-light: #e3e8ee;
+  --board-dark: #8fa3b8;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-c-brilliant: var(--c-brilliant);
+  --color-c-great: var(--c-great);
+  --color-c-best: var(--c-best);
+  --color-c-excellent: var(--c-excellent);
+  --color-c-good: var(--c-good);
+  --color-c-book: var(--c-book);
+  --color-c-forced: var(--c-forced);
+  --color-c-inaccuracy: var(--c-inaccuracy);
+  --color-c-mistake: var(--c-mistake);
+  --color-c-blunder: var(--c-blunder);
+  --color-c-missedWin: var(--c-missedWin);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
