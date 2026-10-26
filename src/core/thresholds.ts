@@ -51,6 +51,23 @@ export const THRESHOLDS = {
     /** Minimum loss for the label (Inaccuracy-sized or larger). */
     minLoss: 10,
   },
+
+  /**
+   * Moves that make a forced mate appear or disappear (the rules Lichess uses for mates).
+   * Every mate counts as 97.5 % in the win % model, so without these a move that lets your
+   * own mate slip while staying far ahead, or that walks into a mate in an already bad
+   * position, would seem to lose (almost) nothing. The engine's top move is exempt.
+   */
+  mate: {
+    /** Allowing a forced mate is a Blunder when winBefore was above this (about −7.0)... */
+    allowedBlunderAbove: 7,
+    /** ...a Mistake when it was above this (about −10.0), and an Inaccuracy otherwise. */
+    allowedMistakeAbove: 2.5,
+    /** Letting your forced mate slip is an Inaccuracy if winAfter is still at least this... */
+    lostInaccuracyFrom: 97.5,
+    /** ...a Mistake if it is at least this (about +7.0), and a Blunder otherwise. */
+    lostMistakeFrom: 93,
+  },
 } as const;
 
 /** Material values in pawn units used for sacrifice detection and explanations. */

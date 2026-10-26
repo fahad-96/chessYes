@@ -1,0 +1,101 @@
+/*
+ * Board skin for chessground. We draw the squares ourselves instead of using
+ * chessground.brown.css so the board follows the theme tokens (--board-light /
+ * --board-dark, switched by [data-board] in index.css).
+ */
+
+.kb-board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  /* Lets the coordinates scale with the board via cqi units. */
+  container-type: inline-size;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--board-light);
+}
+
+.kb-board > .cg-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * One 25% x 25% tile covers 2 x 2 squares. Its quadrants, clockwise from the
+ * top-right, are dark / light / dark / light, which makes a1 dark and h1 light.
+ * The pattern is symmetric under rotation, so it is correct for both orientations.
+ */
+.kb-board cg-board {
+  background-color: var(--board-light);
+  background-image: repeating-conic-gradient(var(--board-dark) 0% 25%, var(--board-light) 0% 50%);
+  background-size: 25% 25%;
+}
+
+.kb-board cg-board square.last-move {
+  background-color: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.kb-board cg-board square.check {
+  background: radial-gradient(
+    ellipse at center,
+    rgb(255 72 72 / 0.95) 0%,
+    rgb(229 57 53 / 0.65) 32%,
+    rgb(183 28 28 / 0) 72%
+  );
+}
+
+/* Coordinates sit inside the edge squares, coloured like the opposite square. */
+.kb-board .cg-wrap coords {
+  opacity: 1;
+  font-family: var(--font-sans);
+  font-size: clamp(8px, 2.3cqi, 13px);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.kb-board .cg-wrap coords.ranks {
+  left: 0;
+  top: 0;
+  width: 12.5%;
+  height: 100%;
+}
+
+.kb-board .cg-wrap coords.ranks coord {
+  flex: 1 1 0;
+  transform: none;
+  padding: 0.35em 0 0 0.35em;
+}
+
+.kb-board .cg-wrap coords.files {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  text-transform: none;
+}
+
+.kb-board .cg-wrap coords.files coord {
+  flex: 1 1 0;
+  text-align: right;
+  padding: 0 0.35em 0.3em 0;
+}
+
+/* White at the bottom: rank 1 / file a sit on dark squares. */
+.kb-board .cg-wrap coords.ranks coord:nth-child(odd),
+.kb-board .cg-wrap coords.files coord:nth-child(odd) {
+  color: var(--board-light);
+}
+.kb-board .cg-wrap coords.ranks coord:nth-child(even),
+.kb-board .cg-wrap coords.files coord:nth-child(even) {
+  color: var(--board-dark);
+}
+
+/* Black at the bottom: rank 1 (on the h-file) and file a (on rank 8) sit on light squares. */
+.kb-board .cg-wrap coords.ranks.black coord:nth-child(odd),
+.kb-board .cg-wrap coords.files.black coord:nth-child(odd) {
+  color: var(--board-dark);
+}
+.kb-board .cg-wrap coords.ranks.black coord:nth-child(even),
+.kb-board .cg-wrap coords.files.black coord:nth-child(even) {
+  color: var(--board-light);
+}

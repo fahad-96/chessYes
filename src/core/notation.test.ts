@@ -39,7 +39,9 @@ describe('notation', () => {
 
   it('counts legal moves and plays moves', () => {
     expect(legalMoveCount(START_FEN)).toBe(20);
-    expect(fenAfterUci(START_FEN, 'e2e4')?.startsWith('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b')).toBe(true);
+    expect(
+      fenAfterUci(START_FEN, 'e2e4')?.startsWith('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b'),
+    ).toBe(true);
     expect(fenAfterUci(START_FEN, 'e2e5')).toBeNull();
   });
 

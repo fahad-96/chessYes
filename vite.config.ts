@@ -8,6 +8,11 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
   plugins: [react(), tailwindcss()],
+  build: {
+    // The opening book (~700 kB of position data, ~100 kB gzipped) is its own lazily
+    // loaded chunk; everything else stays well under Vite's default 500 kB warning.
+    chunkSizeWarningLimit: 800,
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

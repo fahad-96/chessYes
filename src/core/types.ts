@@ -69,7 +69,8 @@ export interface AnalysisProgress {
 // ---------------------------------------------------------------------------
 
 export type GameSource = 'chesscom' | 'lichess' | 'pgn';
-export type TimeClass = 'ultrabullet' | 'bullet' | 'blitz' | 'rapid' | 'classical' | 'daily' | 'unknown';
+export type TimeClass =
+  'ultrabullet' | 'bullet' | 'blitz' | 'rapid' | 'classical' | 'daily' | 'unknown';
 export type GameResult = '1-0' | '0-1' | '1/2-1/2' | '*';
 
 export interface PlayerInfo {
@@ -101,6 +102,8 @@ export interface GameRecord {
   rated?: boolean;
   /** Unix epoch milliseconds when the game ended (or started when the end is unknown). */
   endTime?: number;
+  /** Unix epoch milliseconds when the game started, when the source reports it. */
+  startTime?: number;
   eco?: string;
   openingName?: string;
   /** Only `standard` games can be reviewed; other variants are listed but disabled. */

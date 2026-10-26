@@ -3,6 +3,7 @@
  * https://github.com/lichess-org/chess-openings). The generated data lives in
  * ./data/openings.json and is rebuilt with `npm run openings`.
  */
+import { positionKey } from '../notation';
 
 export interface OpeningInfo {
   eco: string;
@@ -32,11 +33,35 @@ export interface OpeningBook {
   lookup(fen: string): OpeningInfo | null;
 }
 
-export function createOpeningBook(_data: OpeningBookData): OpeningBook {
-  throw new Error('not implemented');
+/**
+ * Wraps book data in lookup helpers. Positions are matched by positionKey, so move
+ * counters and the en passant square do not matter and transpositions are found.
+ */
+export function createOpeningBook(data: OpeningBookData): OpeningBook {
+  const { names, positions } = data;
+  // hasOwn keeps keys such as "constructor" from resolving through the prototype.
+  const has = (fen: string) => Object.hasOwn(positions, positionKey(fen));
+  return {
+    has,
+    lookup(fen) {
+      if (!has(fen)) return null;
+      const entry = names[positions[positionKey(fen)] ?? -1];
+      return entry ? { eco: entry[0], name: entry[1] } : null;
+    },
+  };
 }
+
+let bookPromise: Promise<OpeningBook> | null = null;
 
 /** Lazily loads the bundled book (code-split JSON). Cached after the first call. */
 export function loadOpeningBook(): Promise<OpeningBook> {
-  throw new Error('not implemented');
+  bookPromise ??= import('./data/openings.json')
+    // The inferred JSON type widens the [eco, name] tuples to string[], hence the cast.
+    .then((module) => createOpeningBook(module.default as unknown as OpeningBookData))
+    .catch((error: unknown) => {
+      // Forget the failure (e.g. a chunk that did not download) so the next call retries.
+      bookPromise = null;
+      throw error;
+    });
+  return bookPromise;
 }

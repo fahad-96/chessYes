@@ -70,7 +70,10 @@ export const useSettings = create<SettingsState>()(
             search,
             ...state.recent.filter(
               (r) =>
-                !(r.platform === search.platform && r.username.toLowerCase() === search.username.toLowerCase()),
+                !(
+                  r.platform === search.platform &&
+                  r.username.toLowerCase() === search.username.toLowerCase()
+                ),
             ),
           ].slice(0, MAX_RECENT),
         })),

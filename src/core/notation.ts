@@ -11,7 +11,9 @@ export function sideToMove(fen: string): Color {
 }
 
 /** Splits a UCI move ("e7e8q") into parts. Returns null if malformed. */
-export function parseUci(uci: string): { from: Square; to: Square; promotion?: PieceSymbol } | null {
+export function parseUci(
+  uci: string,
+): { from: Square; to: Square; promotion?: PieceSymbol } | null {
   const match = UCI_RE.exec(uci);
   if (!match) return null;
   const [, from, to, promotion] = match;

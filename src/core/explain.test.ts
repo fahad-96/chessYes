@@ -1,0 +1,384 @@
+import { describe, expect, it } from 'vitest';
+import { describeAdvantage, explainMove } from './explain';
+import type { ExplainInput } from './explain';
+import { detectSacrifice } from './material';
+import { fenAfterUci, legalMoveCount, pvToSan, sideToMove, uciToSan } from './notation';
+import type { Score, SuggestedLine } from './types';
+import { scoreToWinPercent, winPercentFor } from './winPercent';
+
+/*
+ * Engine lines below come from Stockfish 19 (lite, depth 16-18, MultiPV 2), converted
+ * to White's point of view, so every explanation is checked against real engine data.
+ */
+
+const cp = (value: number): Score => ({ type: 'cp', value });
+const mate = (value: number): Score => ({ type: 'mate', value });
+
+/** A SuggestedLine from a FEN and a space-separated UCI principal variation. */
+function line(fen: string, pv: string, score: Score): SuggestedLine {
+  const pvUci = pv.split(' ');
+  const pvSan = pvToSan(fen, pvUci);
+  expect(pvSan).toHaveLength(pvUci.length); // guards against typos in the test data
+  return { uci: pvUci[0] ?? '', san: pvSan[0] ?? '', score, pvUci, pvSan };
+}
+
+type Setup = Partial<ExplainInput> &
+  Pick<ExplainInput, 'classification' | 'fenBefore' | 'uci'> & {
+    /** Engine continuation after the move (UCI), scored by `evalAfter`. */
+    reply?: string;
+  };
+
+/** Builds an ExplainInput, deriving SAN, colour, FEN after and win % from the scores. */
+function setup({ reply, ...input }: Setup): ExplainInput {
+  const color = sideToMove(input.fenBefore);
+  const fenAfter = fenAfterUci(input.fenBefore, input.uci);
+  const san = uciToSan(input.fenBefore, input.uci);
+  if (!fenAfter || !san) throw new Error(`Illegal test move ${input.uci}`);
+  const evalAfter = input.evalAfter ?? null;
+  const evalBest = input.evalBest ?? input.best?.score ?? null;
+  const moverWin = (score: Score | null) =>
+    score ? winPercentFor(scoreToWinPercent(score), color) : 50;
+  return {
+    color,
+    san,
+    fenAfter,
+    winBefore: moverWin(evalBest),
+    winAfter: moverWin(evalAfter),
+    evalAfter,
+    evalBest,
+    isCheckmate: false,
+    playedLine: reply && evalAfter ? line(fenAfter, reply, evalAfter) : undefined,
+    ...input,
+  };
+}
+
+const AFTER_1E4_E5_2NF3 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
+const BEST_2NC6 = line(
+  AFTER_1E4_E5_2NF3,
+  'b8c6 d2d4 e5d4 f3d4 g8f6 d4c6 d7c6 d1d8 e8d8 b1c3',
+  cp(33),
+);
+
+/** The Opera Game (Morphy, Paris 1858) before 11.Bxb5+, 13.Rxd7, 16.Qb8+ and 17.Rd8#. */
+const OPERA = {
+  before11: 'rn2kb1r/p3qppp/5n2/1p2p1B1/2B1P3/1Q6/PPP2PPP/R3K2R w KQkq - 0 11',
+  before13: '3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13',
+  before16: '4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - 0 16',
+  before17: '1n2kb1r/p4ppp/4q3/4p1B1/4P3/8/PPP2PPP/2KR4 w k - 0 17',
+};
+
+describe('describeAdvantage', () => {
+  it.each([
+    [100, 'White is winning'],
+    [85, 'White is winning'],
+    [84.9, 'White is clearly better'],
+    [65, 'White is clearly better'],
+    [64.9, 'White is slightly better'],
+    [55, 'White is slightly better'],
+    [54.9, 'The position is equal'],
+    [50, 'The position is equal'],
+    [45.1, 'The position is equal'],
+    [45, 'Black is slightly better'],
+    [35.1, 'Black is slightly better'],
+    [35, 'Black is clearly better'],
+    [15.1, 'Black is clearly better'],
+    [15, 'Black is winning'],
+    [0, 'Black is winning'],
+  ])('White at %s reads "%s"', (whiteWin, text) => {
+    expect(describeAdvantage(whiteWin)).toBe(text);
+  });
+});
+
+describe('explainMove: simple labels', () => {
+  it('names the opening for book moves', () => {
+    const input = setup({
+      classification: 'book',
+      fenBefore: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+      uci: 'c7c5',
+      opening: { eco: 'B20', name: 'Sicilian Defense' },
+    });
+    expect(explainMove(input)).toBe('Book move. This is the Sicilian Defense.');
+    expect(explainMove({ ...input, opening: undefined })).toBe('Book move.');
+  });
+
+  it('explains a forced move (16...Nxb8 in the Opera Game)', () => {
+    const fenBefore = fenAfterUci(OPERA.before16, 'b3b8') ?? '';
+    expect(legalMoveCount(fenBefore)).toBe(1);
+    const input = setup({ classification: 'forced', fenBefore, uci: 'd7b8', evalAfter: mate(1) });
+    expect(explainMove(input)).toBe('The only legal move.');
+  });
+
+  it('celebrates checkmate (17.Rd8#)', () => {
+    const input = setup({
+      classification: 'best',
+      fenBefore: OPERA.before17,
+      uci: 'd1d8',
+      isCheckmate: true,
+    });
+    expect(explainMove(input)).toMatch(/^Checkmate!/);
+  });
+
+  it('confirms a best move and mentions a forced mate', () => {
+    const input = setup({
+      classification: 'best',
+      fenBefore: OPERA.before16,
+      uci: 'b3b8',
+      evalAfter: mate(1),
+    });
+    expect(explainMove(input)).toBe('Best move. Mate follows on the next move.');
+    expect(explainMove({ ...input, evalAfter: cp(500) })).toBe('Best move.');
+  });
+
+  it('names the engine move for excellent and good moves', () => {
+    // 2...Nf6 (Petrov) is a hair behind 2...Nc6 for the engine.
+    const excellent = setup({
+      classification: 'excellent',
+      fenBefore: AFTER_1E4_E5_2NF3,
+      uci: 'g8f6',
+      best: BEST_2NC6,
+      evalAfter: cp(43),
+    });
+    expect(explainMove(excellent)).toBe(
+      "Excellent move. The engine's top choice was Nc6, but this is almost as strong.",
+    );
+    const good = setup({ ...excellent, classification: 'good', uci: 'd7d6' });
+    expect(explainMove(good)).toBe('Good move, though Nc6 was more precise.');
+  });
+});
+
+describe('explainMove: brilliant and great moves', () => {
+  it('explains a queen sacrifice that forces mate (16.Qb8+)', () => {
+    const input = setup({
+      classification: 'brilliant',
+      fenBefore: OPERA.before16,
+      uci: 'b3b8',
+      evalAfter: mate(1),
+      reply: 'd7b8 d1d8',
+      sacrifice: detectSacrifice(OPERA.before16, 'b3b8') ?? undefined,
+    });
+    expect(explainMove(input)).toBe(
+      'Brilliant! You sacrifice your queen on b8. Mate follows on the next move.',
+    );
+  });
+
+  it('names an exchange sacrifice (13.Rxd7)', () => {
+    const input = setup({
+      classification: 'brilliant',
+      fenBefore: OPERA.before13,
+      uci: 'd1d7',
+      best: line(OPERA.before13, 'd1d7 f6d7 g5e7 f8e7 b5d7 d8d7 b3b8 d7d8 b8b5 e8f8', cp(714)),
+      evalAfter: cp(710),
+      reply: 'f6d7 g5e7 f8e7 b5d7 d8d7 b3b8 d7d8 b8e5 e8g8 e5e7',
+      sacrifice: detectSacrifice(OPERA.before13, 'd1d7') ?? undefined,
+    });
+    expect(explainMove(input)).toBe(
+      'Brilliant! You sacrifice the exchange on d7. It is sound: you are winning.',
+    );
+  });
+
+  it('notes when the opponent should decline the offer (Légal: 5.Nxe5)', () => {
+    // 1.e4 e5 2.Nf3 d6 3.Bc4 Bg4 4.Nc3 g6 5.Nxe5!: Bxd1?? runs into Bxf7+ and Nd5#.
+    const fenBefore = 'rn1qkbnr/ppp2p1p/3p2p1/4p3/2B1P1b1/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 5';
+    const input = setup({
+      classification: 'brilliant',
+      fenBefore,
+      uci: 'f3e5',
+      best: line(fenBefore, 'f3e5 d6e5 d1g4 b8c6 d2d3 c6d4 g4d1 f8h6 c1h6 g8h6', cp(212)),
+      evalAfter: cp(217),
+      reply: 'd6e5 d1g4 b8c6 g4g3 f8g7 d2d3 c6d4 e1d1 h7h5 a2a4',
+      sacrifice: detectSacrifice(fenBefore, 'f3e5') ?? undefined,
+    });
+    expect(input.sacrifice).toEqual({ material: 5, square: 'd1', piece: 'q' });
+    expect(explainMove(input)).toBe(
+      'Brilliant! You offer your queen on d1. ' +
+        'Your opponent does best not to take it, and you are clearly better.',
+    );
+  });
+
+  it('explains an only move and what the alternative allows (Deep Blue - Kasparov: 9.O-O)', () => {
+    const fenBefore = 'r1b1kb1r/pp1nqpp1/2p1Nn1p/8/3P4/3B1N2/PPP2PPP/R1BQK2R w KQkq - 1 9';
+    const input = setup({
+      classification: 'great',
+      fenBefore,
+      uci: 'e1g1',
+      best: line(fenBefore, 'e1g1 f7e6 d3g6 e8d8 c2c4 e7b4 d1c2 b7b5 c4c5 b4c4', cp(148)),
+      secondBest: line(fenBefore, 'd4d5 c6d5 e1g1 f7e6 d3g6 e8d8 c2c4 e7d6 c4d5 f6d5', cp(-187)),
+      evalAfter: cp(179),
+      reply: 'f7e6 d3g6 e8d8 c1f4 f6h7 f4g3 h7g5 f3h4 d7f6 d1d3',
+    });
+    expect(explainMove(input)).toBe(
+      'Great move! This is the only move that keeps your advantage. ' +
+        'After d5 instead, your opponent would be clearly better.',
+    );
+  });
+
+  it('says when the alternative would allow mate', () => {
+    // The back-rank position, with Rd7?? hand-picked as the alternative: Rc1+ mates.
+    const fenBefore = '2r3k1/p4ppp/8/8/8/8/P4PPP/3R2K1 w - - 0 1';
+    const input = setup({
+      classification: 'great',
+      fenBefore,
+      uci: 'g2g3',
+      best: line(fenBefore, 'g2g3 g7g6 d1d7 a7a5', cp(22)),
+      secondBest: line(fenBefore, 'd1d7 c8c1 d7d1 c1d1', mate(-2)),
+      evalAfter: cp(22),
+    });
+    expect(explainMove(input)).toContain('Rd7 would allow mate in 2.');
+  });
+});
+
+describe('explainMove: mistakes', () => {
+  it('spots a hanging queen (2...Qg5?? 3.Nxg5)', () => {
+    const input = setup({
+      classification: 'blunder',
+      fenBefore: AFTER_1E4_E5_2NF3,
+      uci: 'd8g5',
+      best: BEST_2NC6,
+      evalAfter: cp(872),
+      reply: 'f3g5 d7d5 e4d5 g8f6 f1e2 f6d5 e2h5 g7g6 h5f3 d5b4',
+    });
+    expect(explainMove(input)).toBe(
+      'Blunder. This hangs your queen on g5: Nxg5 wins it. Best was Nc6, keeping the position equal.',
+    );
+  });
+
+  it('reports the material the best move would have won (3.d4? instead of 3.Nxg5)', () => {
+    const fenBefore = 'rnb1kbnr/pppp1ppp/8/4p1q1/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'd2d4',
+      best: line(fenBefore, 'f3g5 d7d5 e4d5 g8f6 f1e2 f6d5 e2h5 g7g6 h5f3 d5b4', cp(872)),
+      evalAfter: cp(237),
+      reply: 'g5g4 d4e5 d7d6 b1c3 d6e5 f3e5 g4d1 e1d1 g8f6 c3b5',
+    });
+    expect(explainMove(input)).toBe('Blunder. You missed Nxg5, which wins the queen.');
+  });
+
+  it('names a mate in 1 that was missed (4.Qh4? instead of 4.Qxf7#)', () => {
+    const fenBefore = 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'h5h4',
+      best: line(fenBefore, 'h5f7', mate(1)),
+      evalAfter: cp(-204),
+      reply: 'c6d4 c4b3 a7a5 c2c3 d4b3 a2b3 d7d5 g1f3 d5e4',
+    });
+    expect(explainMove(input)).toBe('Blunder. You had mate in 1 with Qxf7#.');
+  });
+
+  it('warns about allowing a back-rank mate (Rd7?? Rc1+)', () => {
+    const fenBefore = '2r3k1/p4ppp/8/8/8/8/P4PPP/3R2K1 w - - 0 1';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'd1d7',
+      best: line(fenBefore, 'g2g3 g7g6 d1d7 a7a5 d7d5 c8a8 a2a4 g8h8 g1g2 h8g7', cp(22)),
+      evalAfter: mate(-2),
+      reply: 'c8c1 d7d1 c1d1',
+    });
+    expect(explainMove(input)).toBe(
+      'Blunder. This allows a forced mate in 2, starting with Rc1+. ' +
+        'Best was g3, keeping the position equal.',
+    );
+  });
+
+  it('names a bad trade and what it gives up (Blackburne Shilling: 4.Nxe5? Qg5)', () => {
+    const fenBefore = 'r1bqkbnr/pppp1ppp/8/4p3/2BnP3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4';
+    const input = setup({
+      classification: 'mistake',
+      fenBefore,
+      uci: 'f3e5',
+      best: line(fenBefore, 'f3d4 e5d4 e1g1 g8f6 f1e1 d7d6 c2c3 f8e7 c3d4 d6d5', cp(112)),
+      evalAfter: cp(-88),
+      reply: 'd8g5 c4f7 e8d8 e1g1 g5e5 d2d3 g8h6 f7d5 c7c6 c2c3',
+    });
+    expect(explainMove(input)).toBe(
+      'Mistake. This loses a piece for two pawns after Qg5. Best was Nxd4, keeping a slight edge.',
+    );
+  });
+
+  it('does not report material the engine line wins back (2...h6? 3.Nxe5 Qe7)', () => {
+    const input = setup({
+      classification: 'inaccuracy',
+      fenBefore: AFTER_1E4_E5_2NF3,
+      uci: 'h7h6',
+      best: BEST_2NC6,
+      evalAfter: cp(138),
+      reply: 'f3e5 d8e7 d2d4 d7d6 e5g4 e7e4 g4e3 e4h4 b1c3 h4d8',
+    });
+    expect(explainMove(input)).toBe(
+      'Inaccuracy. The position was equal, but now your opponent is slightly better. ' +
+        'Best was Nc6, keeping the position equal.',
+    );
+  });
+
+  it('says a winning chance was missed (Opera Game: 11.Qxb5+? instead of 11.Bxb5+)', () => {
+    const input = setup({
+      classification: 'missedWin',
+      fenBefore: OPERA.before11,
+      uci: 'b3b5',
+      best: line(OPERA.before11, 'c4b5 e8d8 e1c1 d8c7 d1d3 e7b4 b3f7 b4e7 d3c3 c7b6', cp(684)),
+      evalAfter: cp(50),
+      reply: 'e7d7 b5e5 f8e7 a1d1 b8c6 e5f4 d7g4 e4e5 g4f4 g5f4',
+    });
+    expect(input.winBefore).toBeGreaterThanOrEqual(70);
+    expect(explainMove(input)).toBe(
+      'Missed win. You let a winning chance slip, and now the position is equal. ' +
+        'Best was Bxb5+, which keeps your winning chances.',
+    );
+  });
+
+  it('explains a stalemate blunder', () => {
+    const fenBefore = '7k/8/5K2/8/8/8/8/6Q1 w - - 0 1';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'g1g6',
+      best: line(fenBefore, 'g1g7', mate(1)),
+      winAfter: 50,
+    });
+    expect(explainMove(input)).toBe(
+      'Blunder. This stalemates your opponent, so the game is a draw. ' +
+        'Best was Qg7#, which is checkmate.',
+    );
+  });
+
+  it('falls back to the size of the swing when there is no engine line', () => {
+    const input = setup({
+      classification: 'mistake',
+      fenBefore: AFTER_1E4_E5_2NF3,
+      uci: 'h7h6',
+      winBefore: 80,
+      winAfter: 58,
+    });
+    expect(explainMove(input)).toBe(
+      'Mistake. You were clearly better, but now you are only slightly better.',
+    );
+  });
+});
+
+describe('explainMove: robustness', () => {
+  it('never throws on malformed positions or lines', () => {
+    const input: ExplainInput = {
+      classification: 'blunder',
+      color: 'w',
+      san: '??',
+      uci: 'zz',
+      fenBefore: 'not a fen',
+      fenAfter: 'not a fen',
+      winBefore: 60,
+      winAfter: 20,
+      evalAfter: cp(-300),
+      evalBest: cp(100),
+      best: { uci: 'e2e4', san: 'e4', score: cp(100), pvUci: ['e2e4', 'e9e5'], pvSan: ['e4'] },
+      playedLine: { uci: 'x', san: 'x', score: cp(-300), pvUci: ['x'], pvSan: [] },
+      isCheckmate: false,
+    };
+    expect(explainMove(input)).toBe(
+      'Blunder. You were slightly better, but now your opponent is clearly better. ' +
+        'Best was e4, keeping a slight edge.',
+    );
+  });
+});

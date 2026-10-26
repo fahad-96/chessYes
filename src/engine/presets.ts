@@ -46,5 +46,22 @@ export const PRESETS: Record<PresetId, Preset> = {
  * Safe to call outside a browser (returns 'standard').
  */
 export function recommendPreset(): PresetId {
-  throw new Error('not implemented');
+  if (typeof navigator === 'undefined' || !navigator) return 'standard';
+  // Not in every browser's typings yet (Chromium-only APIs).
+  const nav = navigator as Navigator & {
+    userAgentData?: { mobile?: boolean };
+    deviceMemory?: number;
+  };
+
+  // Android tablets report userAgentData.mobile = false, so the user agent is checked too.
+  const mobile =
+    nav.userAgentData?.mobile === true || /Mobi|Android|iPhone|iPad/.test(nav.userAgent ?? '');
+  if (mobile) return 'fast';
+
+  const cores = nav.hardwareConcurrency;
+  const memoryGb = nav.deviceMemory;
+  if ((cores !== undefined && cores <= 4) || (memoryGb !== undefined && memoryGb <= 4)) {
+    return 'fast';
+  }
+  return 'standard';
 }

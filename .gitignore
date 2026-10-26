@@ -9,3 +9,6 @@ Thumbs.db
 .idea
 # Copied from node_modules/stockfish by scripts/copy-engine.mjs
 public/engine
+
+# Local tool settings
+.claude/

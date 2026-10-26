@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest an idea for Kibitz
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would help you as a player?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea

@@ -20,7 +20,9 @@ function PageFallback() {
   );
 }
 
-const page = (element: React.ReactNode) => <Suspense fallback={<PageFallback />}>{element}</Suspense>;
+const page = (element: React.ReactNode) => (
+  <Suspense fallback={<PageFallback />}>{element}</Suspense>
+);
 
 const router = createHashRouter([
   {

@@ -1,0 +1,26 @@
+name: Bug report
+description: Something is broken or a move is classified wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game link or review URL
+      description: For classification issues, the game and the move (e.g. "18...Nf5 marked Brilliant").
+  - type: textarea
+    id: pgn
+    attributes:
+      label: PGN (optional)
+      render: text
+  - type: input
+    id: device
+    attributes:
+      label: Browser and device
+      placeholder: e.g. Chrome 130 on Android, Safari on iPhone 15

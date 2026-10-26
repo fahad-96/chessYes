@@ -23,18 +23,26 @@ const sizes: Record<Size, string> = {
   icon: 'h-10 w-10 rounded-lg',
 };
 
-export function Button({ variant = 'secondary', size = 'md', className, type = 'button', ...props }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cn(
-        'inline-flex items-center justify-center whitespace-nowrap transition-colors select-none',
-        'disabled:pointer-events-none disabled:opacity-50',
-        variants[variant],
-        sizes[size],
-        className,
-      )}
-      {...props}
-    />
+/**
+ * Button classes, exported so links (react-router `<Link>`, `<a>`) can look like
+ * buttons without nesting a <button> inside an <a>.
+ */
+export function buttonClass(variant: Variant = 'secondary', size: Size = 'md', className?: string) {
+  return cn(
+    'inline-flex items-center justify-center whitespace-nowrap transition-colors select-none',
+    'disabled:pointer-events-none disabled:opacity-50',
+    variants[variant],
+    sizes[size],
+    className,
   );
+}
+
+export function Button({
+  variant = 'secondary',
+  size = 'md',
+  className,
+  type = 'button',
+  ...props
+}: ButtonProps) {
+  return <button type={type} className={buttonClass(variant, size, className)} {...props} />;
 }

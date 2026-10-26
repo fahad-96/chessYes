@@ -12,7 +12,8 @@ export function formatTimeControl(timeControl: string | undefined): string {
   const base = Number(baseRaw);
   if (!Number.isFinite(base)) return timeControl;
   const inc = incRaw === undefined ? undefined : Number(incRaw);
-  const baseLabel = base % 60 === 0 ? `${base / 60}` : base < 60 ? `${base}s` : `${(base / 60).toFixed(1)}`;
+  const baseLabel =
+    base % 60 === 0 ? `${base / 60}` : base < 60 ? `${base}s` : `${(base / 60).toFixed(1)}`;
   if (inc === undefined || !Number.isFinite(inc)) {
     return base < 60 ? `${base} sec` : `${baseLabel} min`;
   }
@@ -58,7 +59,11 @@ export function formatGameDate(epochMs: number | undefined, now = Date.now()): s
   }
   if (diff >= 0 && diff < 2 * day) return 'yesterday';
   if (diff >= 0 && diff < 7 * day) return `${Math.floor(diff / day)} days ago`;
-  return new Date(epochMs).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(epochMs).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 /** Formats an accuracy value: 87.43 → "87.4". */
