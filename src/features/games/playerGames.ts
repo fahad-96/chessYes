@@ -90,7 +90,17 @@ export async function loadProfile(
   };
 }
 
-/** Profile plus the newest page of games. Requests run one after another (Chess.com 429s parallel ones). */
+/** The player exists, but their games could not be loaded. */
+export class GamesUnavailableError extends Error {
+  override name = 'GamesUnavailableError';
+}
+
+/**
+ * Profile plus the newest page of games. Requests run one after another (Chess.com 429s
+ * parallel ones). Only a missing profile means the player does not exist: once the profile
+ * has loaded, a "not found" for the games themselves (closed or restricted accounts, or a
+ * site that refuses the request) is reported as a GamesUnavailableError instead.
+ */
 export async function loadFirstPage(
   platform: Platform,
   username: string,
@@ -98,12 +108,21 @@ export async function loadFirstPage(
   onProgress?: ProgressCallback,
 ): Promise<GameListData> {
   const profile = await loadProfile(platform, username, signal);
-  const cursor: PageCursor =
-    platform === 'chesscom'
-      ? { platform, archives: await fetchChessComArchives(profile.username, signal), next: 0 }
-      : { platform };
-  const empty: GameListData = { profile, games: [], cursor, hasMore: true };
-  return loadNextPage(empty, signal, onProgress);
+  try {
+    const cursor: PageCursor =
+      platform === 'chesscom'
+        ? { platform, archives: await fetchChessComArchives(profile.username, signal), next: 0 }
+        : { platform };
+    const empty: GameListData = { profile, games: [], cursor, hasMore: true };
+    return await loadNextPage(empty, signal, onProgress);
+  } catch (error) {
+    if (classifyLoadError(error) !== 'not-found') throw error;
+    const site = platform === 'chesscom' ? 'Chess.com' : 'Lichess';
+    throw new GamesUnavailableError(
+      `${site} found ${profile.username} but did not return their games.`,
+      { cause: error },
+    );
+  }
 }
 
 /**

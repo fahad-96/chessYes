@@ -7,8 +7,13 @@ import type { AnalysisSettings, PositionAnalysis, TerminalState } from '@/core/t
  * invalidating anything, and partial runs can resume where they stopped.
  */
 
-/** Bump when the stored shape changes; older entries are then ignored. */
-const CACHE_VERSION = 1;
+/**
+ * Bump when the stored shape changes, or when stored analyses are known to be wrong;
+ * older entries are then ignored.
+ * 2: the engine wrapper no longer mixes MultiPV lines from different iterations, which
+ *    could store the same move as both line 1 and line 2.
+ */
+const CACHE_VERSION = 2;
 
 interface CacheEntry {
   v: typeof CACHE_VERSION;

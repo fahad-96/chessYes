@@ -23,9 +23,16 @@ export const THRESHOLDS = {
   /** "Great": the engine's top move when every alternative is clearly worse. */
   great: {
     /** The best move must beat the second-best move by at least this much. */
-    minGapToSecond: 10,
+    minGapToSecond: 15,
     /** If the second-best move still keeps at least this, the move was not critical. */
     maxSecondBestWin: 70,
+    /** The search after the move must confirm it: at most this much lost. */
+    maxLoss: 5,
+    /**
+     * A capture that wins at least this much material outright (static exchange before
+     * the move, pawn units) takes something that was simply hanging: obvious, not Great.
+     */
+    obviousCaptureGain: 2,
   },
 
   /** "Brilliant": a sound sacrifice. */
@@ -42,8 +49,8 @@ export const THRESHOLDS = {
 
   /** "Missed Win": a winning move was available and the player let it slip. */
   missedWin: {
-    /** The best move kept at least this (a clearly winning position). */
-    minWinBefore: 70,
+    /** The best move kept at least this (a clearly winning position, about +3.0). */
+    minWinBefore: 75,
     /** After the move played the position is no longer winning. */
     maxWinAfter: 60,
     /** ...but not lost either (otherwise it is simply a Blunder). */

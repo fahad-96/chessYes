@@ -212,6 +212,22 @@ describe('explainMove: brilliant and great moves', () => {
     );
   });
 
+  it('says "only" for a slight edge, not for a clear one', () => {
+    // Same position, with the alternative still clearly better for White (+2.0).
+    const fenBefore = 'r1b1kb1r/pp1nqpp1/2p1Nn1p/8/3P4/3B1N2/PPP2PPP/R1BQK2R w KQkq - 1 9';
+    const input = setup({
+      classification: 'great',
+      fenBefore,
+      uci: 'e1g1',
+      best: line(fenBefore, 'e1g1 f7e6 d3g6 e8d8', cp(900)),
+      evalAfter: cp(900),
+    });
+    const after = (score: Score) =>
+      explainMove({ ...input, secondBest: line(fenBefore, 'd4d5 c6d5', score) });
+    expect(after(cp(200))).toContain('After d5 instead, you would be clearly better.');
+    expect(after(cp(60))).toContain('After d5 instead, you would be only slightly better.');
+  });
+
   it('says when the alternative would allow mate', () => {
     // The back-rank position, with Rd7?? hand-picked as the alternative: Rc1+ mates.
     const fenBefore = '2r3k1/p4ppp/8/8/8/8/P4PPP/3R2K1 w - - 0 1';
@@ -239,6 +255,52 @@ describe('explainMove: mistakes', () => {
     });
     expect(explainMove(input)).toBe(
       'Blunder. This hangs your queen on g5: Nxg5 wins it. Best was Nc6, keeping the position equal.',
+    );
+  });
+
+  it('does not call a piece traded for a bishop hanging (removing the defender: ...a6?? Bxf6)', () => {
+    // Bxf6 gxf6 trades the knight for the bishop; the rook on d5 is what is lost.
+    const fenBefore = '1r4k1/p4ppp/5n2/3r2B1/8/8/PPP2PPP/R2R2K1 b - - 0 1';
+    const input = setup({
+      classification: 'blunder',
+      fenBefore,
+      uci: 'a7a6',
+      best: line(fenBefore, 'd5d1 a1d1 h7h6 g5e3 b8b7', cp(-60)),
+      evalAfter: cp(480),
+      reply: 'g5f6 g7f6 d1d5 g8g7 g2g3 b8c8',
+    });
+    expect(explainMove(input)).toBe(
+      'Blunder. This loses a rook after Bxf6. Best was Rxd1+, keeping a slight edge.',
+    );
+  });
+
+  it('names a rook won with a minor piece traded on the way as a rook, not the exchange', () => {
+    // White to move after ...a6??: Bxf6 gxf6 Rxd5 wins knight and rook for the bishop.
+    const fenBefore = '1r4k1/5ppp/p4n2/3r2B1/8/8/PPP2PPP/R2R2K1 w - - 0 2';
+    const input = setup({
+      classification: 'mistake',
+      fenBefore,
+      uci: 'h2h3',
+      best: line(fenBefore, 'g5f6 g7f6 d1d5 g8g7 g2g3 b8c8', cp(480)),
+      evalAfter: cp(60),
+      reply: 'd5d1 a1d1 h7h6 g5e3',
+    });
+    expect(explainMove(input)).toBe('Mistake. You missed Bxf6, which wins a rook.');
+  });
+
+  it('does not blame a pawn that is taken back at once (exd5 cxd5)', () => {
+    // Made-up position: after ...Nf6? the line trades on d5 and then takes the loose b-pawn.
+    const fenBefore = 'rn1qkbnr/pp2pppp/2p5/3p4/4P3/1Q6/PPPP1PPP/RNB1KBNR b KQkq - 0 1';
+    const input = setup({
+      classification: 'inaccuracy',
+      fenBefore,
+      uci: 'g8f6',
+      best: line(fenBefore, 'd8c7 e4d5 c6d5 b1c3', cp(30)),
+      evalAfter: cp(120),
+      reply: 'e4d5 c6d5 b3b7 b8d7 g1f3 e7e6',
+    });
+    expect(explainMove(input)).toBe(
+      'Inaccuracy. This loses a pawn after exd5. Best was Qc7, keeping the position equal.',
     );
   });
 
@@ -323,7 +385,7 @@ describe('explainMove: mistakes', () => {
       evalAfter: cp(50),
       reply: 'e7d7 b5e5 f8e7 a1d1 b8c6 e5f4 d7g4 e4e5 g4f4 g5f4',
     });
-    expect(input.winBefore).toBeGreaterThanOrEqual(70);
+    expect(input.winBefore).toBeGreaterThanOrEqual(75);
     expect(explainMove(input)).toBe(
       'Missed win. You let a winning chance slip, and now the position is equal. ' +
         'Best was Bxb5+, which keeps your winning chances.',

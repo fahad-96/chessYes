@@ -13,7 +13,7 @@ export function Chip({ selected, className, type = 'button', ...props }: ChipPro
       type={type}
       aria-pressed={selected}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors',
+        'inline-flex h-10 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors sm:h-8',
         selected
           ? 'border-accent/60 bg-accent/15 text-text'
           : 'border-line bg-surface text-muted hover:bg-surface-2 hover:text-text',

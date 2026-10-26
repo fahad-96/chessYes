@@ -4,7 +4,13 @@ import { gameAccuracy, moveAccuracy } from './accuracy';
 import { explainMove } from './explain';
 import { detectSacrifice } from './material';
 import { START_FEN, positionKey } from './notation';
-import type { OpeningBook, OpeningInfo } from './openings';
+import openingsJson from './openings/data/openings.json';
+import {
+  createOpeningBook,
+  type OpeningBook,
+  type OpeningBookData,
+  type OpeningInfo,
+} from './openings';
 import { REVIEW_FORMAT_VERSION, buildGameReview, pickKeyMoments } from './review';
 import { THRESHOLDS } from './thresholds';
 import {
@@ -248,8 +254,8 @@ describe('buildGameReview: a complete game', () => {
   it('only looks for sacrifices where Brilliant is still possible', () => {
     review();
     const checked = sacrificeMock.mock.calls.map(([, uci]) => uci);
-    // Not Qh5 (loses 2.8 points) and not Nf6 (blunder).
-    expect(checked).toEqual(['e2e4', 'e7e5', 'b8c6', 'f1c4', 'h5f7']);
+    // Not Qh5 (loses 2.8 points), not Nf6 (blunder) and not Qxf7# (the game is over).
+    expect(checked).toEqual(['e2e4', 'e7e5', 'b8c6', 'f1c4']);
     expect(sacrificeMock).toHaveBeenCalledWith(SCHOLAR.moves[4]!.fenBefore, 'f1c4');
   });
 });
@@ -284,6 +290,89 @@ describe('buildGameReview: classifications in context', () => {
       expect.objectContaining({ san: 'Bc4', classification: 'brilliant', sacrifice: bishop }),
     );
     expect(result.keyMoments).toEqual([4, 5, 6]);
+  });
+
+  it('never labels the mating move Great, even when every alternative is far worse', () => {
+    const analyses = scholarAnalyses();
+    // Qxf7# against an alternative that only keeps an edge (+0.5).
+    analyses[6] = analysed(SCHOLAR, 6, ['h5f7', mate(1)], ['c4f7 e8e7', cp(50)]);
+    const qxf7 = buildGameReview(SCHOLAR, analyses, NO_BOOK).moves[6];
+    expect(qxf7?.classification).toBe('best');
+    expect(qxf7?.explanation).toBe('Checkmate! Well played.');
+  });
+
+  it('does not label stepping out of a fork Brilliant (the forked rook was already lost)', () => {
+    // ...Nc2+ forks Ke1 and Ra1; Kd2 is the engine's move and keeps White winning.
+    const game = gameFromSan(['Kd2'], '4k3/8/8/8/8/8/2n5/R3K2R w KQ - 0 1');
+    const analyses = [
+      analysed(game, 0, ['e1d2 c2a1 h1a1', cp(600)], ['e1d1 c2a1', cp(450)]),
+      analysed(game, 1, ['c2a1 h1a1 e8d7', cp(600)]),
+    ];
+    const [kd2] = buildGameReview(game, analyses, NO_BOOK).moves;
+    expect(kd2?.classification).toBe('best');
+    expect(kd2?.sacrifice).toBeUndefined();
+  });
+
+  it('does not treat a capture that ends the game as a sacrifice', () => {
+    // Nxe3 leaves king and knight against king: drawn on the spot, so Kxe3 never comes.
+    const game = gameFromSan(['Nxe3'], '8/8/8/8/5k2/4p3/2N5/3K4 w - - 0 60');
+    game.finalState = 'insufficient';
+    const analyses = [
+      analysed(game, 0, ['c2e3', cp(0)], ['d1e1 e3e2', cp(-600)]),
+      terminal(game, 1, 'insufficient'),
+    ];
+    const result = buildGameReview(game, analyses, NO_BOOK);
+    expect(result.moves[0]?.classification).not.toBe('brilliant');
+    expect(result.moves[0]?.sacrifice).toBeUndefined();
+    expect(sacrificeMock).not.toHaveBeenCalled();
+  });
+
+  it('does not label a sacrifice Brilliant when the material comes straight back', () => {
+    // 29.Rxg7+ Kxg7 30.Qxh5: the check uncovers the queen on h5. An only move, not a sacrifice.
+    const fen = '3r1rk1/2p2pp1/p6p/1ppBp2q/4P1R1/3P1Q2/5PK1/8 w - - 4 29';
+    const game = gameFromSan(['Rxg7+'], fen);
+    const analyses = [
+      analysed(game, 0, ['g4g7 g8g7 f3h5', cp(340)], ['d3d4 h5g4', cp(-590)]),
+      analysed(game, 1, ['g8g7 f3h5 d8d5', cp(330)]),
+    ];
+    const [rxg7] = buildGameReview(game, analyses, NO_BOOK).moves;
+    expect(sacrificeMock).toHaveBeenCalledTimes(1);
+    expect(rxg7?.sacrifice).toBeUndefined();
+    expect(rxg7?.classification).toBe('great');
+  });
+
+  it('keeps a sacrifice that leads to a forced mate even if material comes back on the way', () => {
+    const fen = '3r1rk1/2p2pp1/p6p/1ppBp2q/4P1R1/3P1Q2/5PK1/8 w - - 4 29';
+    const game = gameFromSan(['Rxg7+'], fen);
+    const analyses = [
+      analysed(game, 0, ['g4g7 g8g7 f3h5', mate(9)], ['d3d4 h5g4', cp(-590)]),
+      analysed(game, 1, ['g8g7 f3h5 d8d5', mate(8)]),
+    ];
+    const [rxg7] = buildGameReview(game, analyses, NO_BOOK).moves;
+    expect(rxg7?.classification).toBe('brilliant');
+  });
+
+  it('does not label answering a check or taking a hanging piece Great', () => {
+    // ...Bxf2+ (made-up evaluations): Kf1 is the only good move, but it answers a check.
+    const check = gameFromSan(
+      ['Kf1'],
+      'r1bqk1nr/pppp1ppp/2n5/8/2B1P3/8/PPPP1bPP/RNBQK2R w KQkq - 0 5',
+    );
+    const checkAnalyses = [
+      analysed(check, 0, ['e1f1 f2b6', cp(-100)], ['e1e2 f2b6', cp(-500)]),
+      analysed(check, 1, ['f2b6 d2d3', cp(-100)]),
+    ];
+    expect(classifications(buildGameReview(check, checkAnalyses, NO_BOOK).moves)).toEqual(['best']);
+
+    // The knight on d5 hangs: Qxd5 wins it, and every other move lets Black consolidate.
+    const hanging = gameFromSan(['Qxd5'], '4k3/8/8/3n4/8/8/8/3QK3 w - - 0 1');
+    const hangingAnalyses = [
+      analysed(hanging, 0, ['d1d5 e8f8', cp(900)], ['e1e2 d5f4', cp(0)]),
+      analysed(hanging, 1, ['e8f8 d5d7', cp(900)]),
+    ];
+    expect(classifications(buildGameReview(hanging, hangingAnalyses, NO_BOOK).moves)).toEqual([
+      'best',
+    ]);
   });
 
   it('labels letting a mate in one slip an Inaccuracy even when the win % does not move', () => {
@@ -476,6 +565,52 @@ describe('buildGameReview: opening book', () => {
     expect(result.moves[0]?.classification).toBe('book');
     expect(result.opening).toBeUndefined();
     expect('opening' in result).toBe(false);
+  });
+
+  it('ends the book at a move that throws the game away, even inside a trap line', () => {
+    // 1.f3 e5 2.g4?? Qh4#: the real book contains "Barnes Opening: Fool's Mate".
+    const realBook = createOpeningBook(openingsJson as unknown as OpeningBookData);
+    const fools = gameFromSan(['f3', 'e5', 'g4', 'Qh4#']);
+    expect(fools.moves.every((m) => realBook.has(m.fenAfter))).toBe(true);
+    const foolsAnalyses = [
+      analysed(fools, 0, ['e2e4 e7e5', cp(30)], ['d2d4 d7d5', cp(25)]),
+      analysed(fools, 1, ['e7e5 e2e4', cp(-60)], ['d7d5 d2d4', cp(-50)]),
+      analysed(fools, 2, ['e2e4 b8c6', cp(-70)], ['b1c3 b8c6', cp(-90)]),
+      analysed(fools, 3, ['d8h4', mate(-1)], ['b8c6 f1g2', cp(-150)]),
+      terminal(fools, 4, 'checkmate'),
+    ];
+    const result = buildGameReview(fools, foolsAnalyses, { book: realBook, engine: ENGINE });
+    expect(classifications(result.moves)).toEqual(['book', 'book', 'blunder', 'best']);
+    expect(result.moves[2]?.explanation).toMatch(/^Blunder\. This allows mate in 1 with Qh4#\./);
+    expect(result.keyMoments).toEqual([3]);
+    expect(result.opening?.lastBookPly).toBe(2);
+    expect(result.opening?.name).not.toMatch(/Fool/);
+  });
+
+  it('never labels a checkmating move Book', () => {
+    const mating = gameFromSan(['f3', 'e5', 'g4', 'Qh4#']);
+    const book = fakeBook(mating.moves.map((m) => [m.fenAfter, KINGS_PAWN]));
+    // Without analysis of the losing move, only the mate itself is known to leave the book.
+    const result = buildGameReview(mating, [], { book, engine: ENGINE });
+    expect(result.opening?.lastBookPly).toBe(3);
+  });
+
+  it('keeps a book move that is the engine top move or loses less than a Mistake', () => {
+    const book = fakeBook([
+      [after(1), KINGS_PAWN],
+      [after(2), KINGS_PAWN],
+      [after(3), KNIGHT],
+    ]);
+    const swings = [
+      analysed(game, 0, ['e2e4', cp(30)]),
+      // 1.e4 is the engine's top move: a deeper search seeing less does not end the book.
+      analysed(game, 1, ['e7e5', cp(-150)]),
+      // 1...e5 loses about 8 points: an Inaccuracy's worth, still theory.
+      analysed(game, 2, ['g1f3', cp(30)]),
+      ...analyses.slice(3),
+    ];
+    const result = buildGameReview(game, swings, { book, engine: ENGINE });
+    expect(classifications(result.moves).slice(0, 3)).toEqual(['book', 'book', 'book']);
   });
 
   it('never labels a move Book when the first move is already out of book', () => {

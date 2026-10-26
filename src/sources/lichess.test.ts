@@ -101,13 +101,32 @@ describe('mapLichessGame', () => {
     ['outoftime', undefined, '1/2-1/2', 'Draw (timeout vs insufficient material)'],
     ['timeout', 'white', '1-0', 'DrNykterstein won (opponent left the game)'],
     ['cheat', 'white', '1-0', 'DrNykterstein won (cheat detected)'],
+    ['insufficientMaterialClaim', undefined, '1/2-1/2', 'Draw (insufficient material)'],
     ['aborted', undefined, '*', 'Game aborted'],
     ['started', undefined, '*', 'Game in progress'],
-    ['unknownFinish', undefined, '*', undefined],
   ])('maps status %s (winner %s) to %s', (status, winner, result, termination) => {
     const record = mapLichessGame(lichessGame({ status, winner }));
     expect(record.result).toBe(result);
     expect(record.termination).toBe(termination);
+  });
+
+  it("falls back to the PGN's Result tag for a finish it does not know", () => {
+    const drawn = LICHESS_PGN.replace('[Result "1-0"]', '[Result "1/2-1/2"]');
+    const record = mapLichessGame(
+      lichessGame({ status: 'someNewDraw', winner: undefined, pgn: drawn }),
+    );
+    expect(record.result).toBe('1/2-1/2');
+    expect(record.termination).toBeUndefined();
+    const unfinished = LICHESS_PGN.replace('[Result "1-0"]', '[Result "*"]');
+    const unfinishedGame = mapLichessGame(
+      lichessGame({ status: 'unknownFinish', winner: undefined, pgn: unfinished }),
+    );
+    expect(unfinishedGame.result).toBe('*');
+    // Without a PGN there is no tag to read.
+    expect(
+      mapLichessGame(lichessGame({ status: 'unknownFinish', winner: undefined, pgn: undefined }))
+        .result,
+    ).toBe('*');
   });
 
   it('maps speeds to time classes', () => {

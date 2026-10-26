@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
 import type { AnalysisStatus } from './useGameReview';
 import { formatLine, nextMoveNumber } from './reviewHelpers';
+import { useMediaQuery } from './useMediaQuery';
 
 const NO_BEST_LINE: ReadonlySet<Classification> = new Set(['book', 'forced']);
 const REPLY_MATTERS: ReadonlySet<Classification> = new Set(['mistake', 'blunder', 'missedWin']);
@@ -26,6 +27,8 @@ export interface CurrentMoveCardProps {
   analysisStatus: AnalysisStatus;
   /** The review could not be built, so analysed moves have no rating either. */
   reviewFailed?: boolean;
+  /** Whether this move has an arrow to draw at all (the switch is hidden otherwise). */
+  hasArrow: boolean;
   showArrow: boolean;
   onToggleArrow: (show: boolean) => void;
   onStart: () => void;
@@ -53,6 +56,7 @@ export function CurrentMoveCard({
   openingName,
   analysisStatus,
   reviewFailed = false,
+  hasArrow,
   showArrow,
   onToggleArrow,
   onStart,
@@ -60,6 +64,9 @@ export function CurrentMoveCard({
   showStartButton,
   className,
 }: CurrentMoveCardProps) {
+  // Swiping only works with touch, so only touch screens are told about it.
+  const touch = useMediaQuery('(pointer: coarse)');
+
   if (ply === 0 || !move) {
     return (
       <Card className={cn('flex flex-col gap-3 p-4', className)} aria-live="polite">
@@ -69,7 +76,10 @@ export function CurrentMoveCard({
         </div>
         <p className="text-sm leading-relaxed text-muted">
           Step through the game to see how every move was rated and what the engine would have
-          played. Use the arrow keys, the buttons below the board, or swipe across the board.
+          played.{' '}
+          {touch
+            ? 'Use the buttons below the board, or swipe across the board.'
+            : 'Use the arrow keys or the buttons below the board.'}
         </p>
         {showStartButton && totalPlies > 0 && (
           <Button variant="primary" onClick={onStart}>
@@ -142,10 +152,9 @@ export function CurrentMoveCard({
       {moveReview.explanation && (
         <p className="text-sm leading-relaxed">{moveReview.explanation}</p>
       )}
+      {/* The explanation already names the opening; the ECO code adds the reference. */}
       {classification === 'book' && moveReview.opening && (
-        <p className="text-sm text-muted">
-          {moveReview.opening.eco} {moveReview.opening.name}
-        </p>
+        <p className="text-sm text-muted">ECO {moveReview.opening.eco}</p>
       )}
 
       {showBest && best && (
@@ -178,20 +187,25 @@ export function CurrentMoveCard({
         </LineBlock>
       )}
 
-      <button
-        type="button"
-        role="switch"
-        aria-checked={showArrow}
-        onClick={() => onToggleArrow(!showArrow)}
-        className="inline-flex items-center gap-2 self-start rounded-md text-xs text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        {showArrow ? (
-          <Eye aria-hidden="true" className="h-3.5 w-3.5" />
-        ) : (
-          <EyeOff aria-hidden="true" className="h-3.5 w-3.5" />
-        )}
-        {showArrow ? 'Hide best-move arrow' : 'Show best-move arrow'}
-      </button>
+      {hasArrow && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showArrow}
+          onClick={() => onToggleArrow(!showArrow)}
+          className="-my-2 inline-flex min-h-10 items-center gap-2 self-start rounded-md pr-2 text-xs text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          {showArrow ? (
+            <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+          ) : (
+            <EyeOff aria-hidden="true" className="h-3.5 w-3.5" />
+          )}
+          Best-move arrow
+          <span aria-hidden="true" className="font-semibold">
+            {showArrow ? 'On' : 'Off'}
+          </span>
+        </button>
+      )}
     </Card>
   );
 }

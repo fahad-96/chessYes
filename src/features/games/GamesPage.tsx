@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeft, ExternalLink, RefreshCw, SearchX, TriangleAlert, UserX } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/Badge';
@@ -13,7 +13,7 @@ import {
   playerPath,
   validateUsername,
 } from '@/features/home/username';
-import type { Platform } from '@/state/settings';
+import { useSettings, type Platform } from '@/state/settings';
 import { GameFiltersBar } from './GameFiltersBar';
 import { GameRow } from './GameRow';
 import {
@@ -80,6 +80,13 @@ function PlayerGames({ cacheId, platform, username }: PlayerGamesProps) {
     setViewState(next);
   };
   const site = PLATFORM_LABELS[platform];
+
+  // A name that does not exist on this site (usually a typo) is not worth keeping in the
+  // recent searches the home page offers.
+  const removeRecent = useSettings((s) => s.removeRecent);
+  useEffect(() => {
+    if (status === 'not-found') removeRecent({ platform, username });
+  }, [status, platform, username, removeRecent]);
 
   return (
     <div className="space-y-5">
@@ -269,44 +276,49 @@ function GameList({ data, state, view, onViewChange, onLoadMore, onRetry }: Game
         </section>
       ))}
 
-      {hidden > 0 ? (
-        <div className="flex justify-center pt-2">
-          <Button onClick={() => onViewChange({ ...view, limit: limit + RENDER_STEP })}>
-            Show more
-            <span className="tabular text-muted">({hidden} more loaded)</span>
-          </Button>
+      {/* Both buttons can show at once: a busy month should not hide the older months. */}
+      {(hidden > 0 || (data.hasMore && !state.error)) && (
+        <div className="flex flex-wrap justify-center gap-2 pt-2">
+          {hidden > 0 && (
+            <Button onClick={() => onViewChange({ ...view, limit: limit + RENDER_STEP })}>
+              Show more
+              <span className="tabular text-muted">({hidden} more loaded)</span>
+            </Button>
+          )}
+          {data.hasMore && !state.error && (
+            <Button
+              onClick={() => {
+                // Make room for the next page so its games appear without another click.
+                onViewChange({ ...view, limit: Math.max(limit, visible.length + RENDER_STEP) });
+                onLoadMore();
+              }}
+              disabled={state.loadingMore}
+              className="min-w-52"
+            >
+              {state.loadingMore ? (
+                <>
+                  <Spinner label="Loading" />
+                  {state.progressLabel ?? 'Loading games'}…
+                </>
+              ) : (
+                <>
+                  {data.profile.platform === 'chesscom' ? 'Load older games' : 'Load more games'}
+                  <NextMonthHint data={data} />
+                </>
+              )}
+            </Button>
+          )}
         </div>
-      ) : state.error ? (
+      )}
+      {state.error ? (
         <ErrorCard
           message={loadErrorMessage(state.error.kind, data.profile.platform)}
           detail={state.error.kind === 'other' ? state.error.detail : undefined}
           onRetry={onRetry}
         />
-      ) : data.hasMore ? (
-        <div className="flex justify-center pt-2">
-          <Button
-            onClick={() => {
-              // Make room for the next page so its games appear without another click.
-              onViewChange({ ...view, limit: Math.max(limit, visible.length + RENDER_STEP) });
-              onLoadMore();
-            }}
-            disabled={state.loadingMore}
-            className="min-w-52"
-          >
-            {state.loadingMore ? (
-              <>
-                <Spinner label="Loading" />
-                {state.progressLabel ?? 'Loading games'}…
-              </>
-            ) : (
-              <>
-                {data.profile.platform === 'chesscom' ? 'Load older games' : 'Load more games'}
-                <NextMonthHint data={data} />
-              </>
-            )}
-          </Button>
-        </div>
       ) : (
+        hidden === 0 &&
+        !data.hasMore &&
         data.games.length > 0 && (
           <p className="pt-2 text-center text-sm text-muted">No older games.</p>
         )

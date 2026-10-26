@@ -90,10 +90,11 @@ function legalUciMoves(fen: string): Set<string> {
  *   (e.g. no WebAssembly support).
  * - analyze(): one search at a time (calls are queued). Sends
  *   "setoption name MultiPV value N", "position fen <initialFen> moves ...",
- *   "go depth D movetime T". Keeps, per MultiPV index, the latest exact-bound line
- *   at the highest depth; resolves on "bestmove" with lines sorted by MultiPV index.
- *   Lines whose first move is not legal are dropped. If aborted, sends "stop" and
- *   rejects with a DOMException named "AbortError" after the engine answers.
+ *   "go depth D movetime T". Keeps the exact-bound lines of every iteration and
+ *   resolves on "bestmove" with the lines of one consistent iteration, sorted by
+ *   MultiPV index (see selectLines). Lines whose first move is not legal are dropped.
+ *   If aborted, sends "stop" and rejects with a DOMException named "AbortError" after
+ *   the engine answers.
  * - If the worker crashes, pending calls reject and the next call re-creates it.
  */
 export class StockfishEngine implements Engine {
@@ -224,7 +225,9 @@ export class StockfishEngine implements Engine {
     const movetime = Math.max(1, Math.floor(request.maxTimeMs));
     const startedAt = Date.now();
 
-    const lines = new Map<number, EngineLine>();
+    // A position has at most as many lines as legal moves (none when the game is over).
+    const expected = Math.min(multiPv, legal.size);
+    const iterations = new Map<number, Map<number, EngineLine>>();
     let nodes: number | undefined;
     let engineTimeMs: number | undefined;
     let stopping = false;
@@ -232,9 +235,9 @@ export class StockfishEngine implements Engine {
     let updateTimer: ReturnType<typeof setTimeout> | undefined;
     let stopTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const snapshot = (): PositionAnalysis => {
-      const sorted = [...lines.entries()].sort(([a], [b]) => a - b).map(([, line]) => line);
-      const result: PositionAnalysis = { fen, depth: sorted[0]?.depth ?? 0, lines: sorted };
+    const snapshot = (bestMove?: string | null): PositionAnalysis => {
+      const lines = selectLines(iterations, expected, bestMove);
+      const result: PositionAnalysis = { fen, depth: lines[0]?.depth ?? 0, lines };
       if (nodes !== undefined) result.nodes = nodes;
       result.timeMs = engineTimeMs ?? Date.now() - startedAt;
       return result;
@@ -276,10 +279,11 @@ export class StockfishEngine implements Engine {
       this.pending = {
         onLine: (line) => {
           if (line.startsWith('bestmove')) {
-            if (!parseBestMove(line)) return;
+            const bestMove = parseBestMove(line);
+            if (!bestMove) return;
             cleanUp();
             if (stopping) reject(abortError());
-            else resolve(snapshot());
+            else resolve(snapshot(bestMove.best));
             return;
           }
           const info = parseInfoLine(line, side);
@@ -289,9 +293,9 @@ export class StockfishEngine implements Engine {
           // Bound scores come from fail-high/low re-searches: only a direction, not a value.
           // An illegal first move means a stale or corrupt line; it must not replace a good one.
           if (info.bound || info.multipv > multiPv || !legal.has(info.pv[0]!)) return;
-          const previous = lines.get(info.multipv);
-          if (previous && info.depth < previous.depth) return;
-          lines.set(info.multipv, { pv: info.pv, score: info.score, depth: info.depth });
+          let iteration = iterations.get(info.depth);
+          if (!iteration) iterations.set(info.depth, (iteration = new Map()));
+          iteration.set(info.multipv, { pv: info.pv, score: info.score, depth: info.depth });
           scheduleUpdate();
         },
         fail: (error) => {
@@ -344,6 +348,61 @@ export class StockfishEngine implements Engine {
     this.pending = null;
     pending?.fail(error);
   }
+}
+
+/** Exact lines printed during a search: depth → MultiPV index → line. */
+export type Iterations = ReadonlyMap<number, ReadonlyMap<number, EngineLine>>;
+
+/**
+ * Picks the lines to report from the exact lines of each iteration, best first.
+ *
+ * Stockfish searches the MultiPV lines one after another at each depth. When the time cap
+ * stops it in the middle of an iteration, that iteration holds only some of the lines, and
+ * a line printed for a lower slot can repeat the move that a higher slot had one iteration
+ * earlier. Filling each slot with its own newest line would mix iterations and can report
+ * the same move twice, so:
+ * - every line comes from the deepest iteration that has all `expected` lines;
+ * - a deeper line 1 replaces it when it is the engine's final choice (`bestMove`; while the
+ *   search runs, `bestMove` is undefined and any deeper line 1 counts), and the other slots
+ *   are filled from the complete iteration without repeating its move;
+ * - with no complete iteration (a very early stop), each slot takes its deepest line;
+ * - the same first move is never reported twice.
+ */
+export function selectLines(
+  iterations: Iterations,
+  expected: number,
+  bestMove?: string | null,
+): EngineLine[] {
+  if (expected < 1) return [];
+  const deepestFirst = [...iterations.keys()].sort((a, b) => b - a);
+  const lineAt = (depth: number, index: number) => iterations.get(depth)?.get(index);
+  const slots = Array.from({ length: expected }, (_, i) => i + 1);
+
+  const complete = deepestFirst.find((depth) => slots.every((index) => lineAt(depth, index)));
+  let candidates: (EngineLine | undefined)[];
+  if (complete === undefined) {
+    candidates = slots.map((index) => {
+      const depth = deepestFirst.find((d) => lineAt(d, index));
+      return depth === undefined ? undefined : lineAt(depth, index);
+    });
+  } else {
+    candidates = slots.map((index) => lineAt(complete, index));
+    const deeperDepth = deepestFirst.find((depth) => depth > complete && lineAt(depth, 1));
+    const deeper = deeperDepth === undefined ? undefined : lineAt(deeperDepth, 1);
+    if (deeper && (bestMove === undefined || deeper.pv[0] === bestMove)) {
+      candidates.unshift(deeper);
+    }
+  }
+
+  const seen = new Set<string>();
+  const lines: EngineLine[] = [];
+  for (const line of candidates) {
+    const move = line?.pv[0];
+    if (!line || move === undefined || seen.has(move)) continue;
+    seen.add(move);
+    lines.push(line);
+  }
+  return lines.slice(0, expected);
 }
 
 function errorMessage(error: unknown): string {

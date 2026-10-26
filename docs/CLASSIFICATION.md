@@ -133,7 +133,13 @@ The move is **Book** when the position after it appears in the opening book **an
 
 The book is built from the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0) by `npm run openings`. Every position along every named line is stored, keyed by piece placement, side to move and castling rights (the en passant square is ignored so transpositions match). The opening shown for the game is the deepest named position reached while still in book.
 
-Book beats every other label: these moves are theory, not decisions to grade.
+Book beats every other label: these moves are theory, not decisions to grade. The dataset also names trap lines, such as "Barnes Opening: Fool's Mate" (1.f3 e5 2.g4?? Qh4#), which contain the losing move itself. So the book also ends, and the move is graded like any other, when a move in a book position:
+
+- delivers checkmate, or
+- loses more than an Inaccuracy's worth of win % (`loss > 10`) and is not the engine's top move, or
+- allows a forced mate.
+
+In Fool's Mate, 1.f3 and 1...e5 are Book, 2.g4 is a Blunder and 2...Qh4# is Best.
 
 ### Forced
 
@@ -156,16 +162,22 @@ When the engine searched only one line (MultiPV 1), the last condition cannot be
 
 A move is **Great** when all of these hold (`THRESHOLDS.great`):
 
-| Condition                                                                | Threshold | Why                                                             |
-| ------------------------------------------------------------------------ | --------- | --------------------------------------------------------------- |
-| It is the engine's top move                                              |           |                                                                 |
-| The engine's second choice is at least `minGapToSecond` worse            | 10 points | Every alternative was clearly worse: this was the only move     |
-| The second choice keeps less than `maxSecondBestWin`                     | 70 %      | If the alternative was still winning, the move was not critical |
-| It is not a simple recapture on the square the opponent just captured on |           | Taking a piece back is usually forced-looking and obvious       |
+| Condition                                                                                              | Threshold | Why                                                                    |
+| ------------------------------------------------------------------------------------------------------ | --------- | ---------------------------------------------------------------------- |
+| It is the engine's top move                                                                            |           |                                                                        |
+| The engine's second choice is at least `minGapToSecond` worse                                          | 15 points | Every alternative was clearly worse: this was the only move            |
+| The second choice keeps less than `maxSecondBestWin`                                                   | 70 %      | If the alternative was still winning, the move was not critical        |
+| The search after the move confirms it: `loss ≤ maxLoss`                                                | 5 points  | A top move that the next search refutes was not a great find           |
+| It does not answer a check                                                                             |           | With few legal options, finding the one that works is rarely hard      |
+| It does not deliver checkmate                                                                          |           | The mate is the end of a winning plan; the moves that set it up decide |
+| It is not a simple recapture on the square the opponent just captured on                               |           | Taking a piece back is usually forced-looking and obvious              |
+| It is not a capture that wins at least `obviousCaptureGain` outright (static exchange before the move) | 2 pawns   | Taking a piece that was simply hanging is obvious, not great           |
 
 The gap is measured between the best and second-best lines of the **same** search (`winBefore − winSecondBest`), so it is not distorted by the different depth of the search after the move. Great needs MultiPV 2: without a second line a move is never Great.
 
-Example: finding the only mate in one when every other move lets the win slip (second choice +1.0, 59 %) is Great.
+A move that delivers checkmate stays Best, however bad the alternatives. (Brilliant would still take precedence, but a mating move never offers material: nothing can be taken after checkmate.)
+
+Example: the only move that keeps the balance when every alternative loses a piece (second choice −2.0, 32.4 %, a gap of 17.6 points) is Great.
 
 ### Missed Win
 
@@ -174,7 +186,7 @@ A move is a **Missed Win** when (`THRESHOLDS.missedWin`):
 | Condition                                                                      | Threshold           |
 | ------------------------------------------------------------------------------ | ------------------- |
 | The base label is Inaccuracy, Mistake or Blunder                               |                     |
-| The position before was winning: `winBefore ≥ minWinBefore`                    | 70 %                |
+| The position before was winning: `winBefore ≥ minWinBefore`                    | 75 % (about +3.0)   |
 | The position after is roughly balanced: `minWinAfter ≤ winAfter < maxWinAfter` | 40 % ≤ win % < 60 % |
 | `loss ≥ minLoss`                                                               | 10 points           |
 
@@ -185,9 +197,14 @@ Example: from +4.0 (81.3 %) to +1.0 (59.1 %) is a Missed Win. From +4.0 to −3.
 A move offers material when the opponent could win material on one of the mover's pieces as a result of it. In detail (`detectSacrifice` in `src/core/material.ts`):
 
 1. For each of the mover's pieces except the king, after the move, compute how much the opponent could win by capturing on its square: a **static exchange evaluation** where both sides recapture with their least valuable legal piece and either side may stop the sequence at any time. Legal moves are used, so pins and checks are respected.
-2. Subtract what the opponent could already win on that piece's previous square before the move (looking at the position before the move as if the mover had passed; skipped when the mover was in check). This way a piece that was already hanging does not count as a new sacrifice.
+2. Subtract what the opponent could already win on that piece's previous square before the move (looking at the position before the move as if the mover had passed, also when the mover was in check). This way a piece that was already hanging does not count as a new sacrifice: stepping out of a fork, or blocking a check while another piece hangs, offers nothing.
 3. The offered amount is the largest result, minus the value of anything the move itself captured and any promotion gain.
 4. It is a sacrifice when the offered amount is at least `THRESHOLDS.brilliant.minSacrifice` (2 pawns).
+
+Two kinds of move never count as a sacrifice:
+
+- **A move that ends the game** on the board (checkmate, stalemate, or a capture that leaves too little material to mate): nothing can be taken after it.
+- **A capture or check whose material comes straight back** (`isRegainedAtOnce` in `src/core/material.ts`): the engine's line after the move has the opponent capture, and after the mover's next move the mover is down less than 2 pawns compared with before the move. A rook check that is taken but uncovers an attack on the queen is a trick, not a sacrifice; it can still be Great. A line that ends in a forced mate for the mover keeps the sacrifice. Quiet moves are not checked this way, so a quiet sacrifice such as Kasparov's 37.Rd7 against Topalov stays Brilliant.
 
 Piece values (`PIECE_VALUES`): pawn 1, knight 3, bishop 3, rook 5, queen 9.
 
@@ -199,7 +216,7 @@ The review highlights up to 8 moves: Brilliant and Great moves first, then the M
 
 - **Engine depth.** Evaluations come from Stockfish running on your device, at depth 12, 16 or 20 depending on the preset, with a time cap per position that can stop the search earlier on slow devices. A shallow search can misjudge sharp positions, so a "Blunder" may occasionally be a deep idea the engine did not see, or the other way round. Raising the depth in Settings gives more reliable labels.
 - **Horizon effects.** Each position is searched separately, so the evaluation before and after a move can come from searches that saw different things. This is why the engine's own top move is always at least Best.
-- **Brilliant and Great are heuristics.** "Sound sacrifice" and "only good move" are judged from material counts and two engine lines. They catch most real brilliancies and only-moves but will sometimes miss one (for example a positional sacrifice of a pawn, or a sacrifice that only pays off beyond the exchange on one square) or flag an obvious one.
+- **Brilliant and Great are heuristics.** "Sound sacrifice" and "only good move" are judged from material counts and two engine lines. They catch most real brilliancies and only-moves but will sometimes miss one (for example a positional sacrifice of a pawn, a sacrifice that only pays off beyond the exchange on one square, or a queen left en prise that was already attacked, such as Fischer's 17...Be6 against Byrne in 1956, which is Great) or flag an obvious one. A sacrifice the engine only finds at a higher depth is missed too: Kasparov's 24.Rxd4 against Topalov (1999) needs more than depth 16.
 - **Mates.** Every mate counts as ±10 pawns (97.5 %), so choosing a slower mate when a faster one existed loses nothing, and accuracy does not punish the [mate swings](#mate-swings) that the labels catch. Delivering checkmate on the board is 100 %.
 - **Win % is a model.** It was fitted by Lichess to games between strong players. It does not know your rating or the clock.
 - **Book coverage.** The book contains named lines from the Lichess dataset, not every popular sideline, so a game can leave "book" earlier than you might expect.

@@ -37,7 +37,8 @@ const TAG_RE = /\[\s*([A-Za-z0-9_]+)\s+"((?:[^"\\\n]|\\.)*)"\s*\]/y;
 const LOOSE_TAG_RE = /\[\s*([A-Za-z0-9_]+)\s+"(.*)"\s*\][^\S\n]*(?=\n|$)/y;
 const NAG_RE = /\$\d*/y;
 const WORD_RE = /[^\s{}();[$]+/y;
-const RESULT_RE = /^(?:1-0|0-1|1\/2-1\/2|\*)$/;
+// "½-½" is not standard PGN, but some exporters and copy-pastes use it for a draw.
+const RESULT_RE = /^(?:1-0|0-1|1\/2-1\/2|½-½|\*)$/;
 const MOVE_NUMBER_PREFIX_RE = /^\d+(?:\.+|…)/;
 const ANNOTATION_SUFFIX_RE = /[!?]+$/;
 const EN_PASSANT_SUFFIX_RE = /^e\.?p\.?$/i;
@@ -64,7 +65,9 @@ function normalize(text: string): string {
 
 /** Classifies a bare word of movetext: result, move number, SAN, or noise to skip. */
 function wordToken(word: string, start: number): Token | null {
-  if (RESULT_RE.test(word)) return { kind: 'result', start, text: word };
+  if (RESULT_RE.test(word)) {
+    return { kind: 'result', start, text: word === '½-½' ? '1/2-1/2' : word };
+  }
   let san = word.replace(MOVE_NUMBER_PREFIX_RE, '');
   if (san === '' || /^\d+$/.test(san)) return { kind: 'number', start, text: word };
   san = san.replace(ANNOTATION_SUFFIX_RE, '');

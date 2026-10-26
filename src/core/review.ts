@@ -1,8 +1,8 @@
 import { gameAccuracy, moveAccuracy } from './accuracy';
 import { classifyMove } from './classify';
 import { explainMove } from './explain';
-import { detectSacrifice } from './material';
-import { legalMoveCount, pvToSan, sideToMove } from './notation';
+import { detectSacrifice, isRegainedAtOnce, staticExchange } from './material';
+import { isInCheck, legalMoveCount, pvToSan, sideToMove } from './notation';
 import type { OpeningBook, OpeningInfo } from './openings';
 import { THRESHOLDS } from './thresholds';
 import {
@@ -16,13 +16,14 @@ import {
   type ParsedMove,
   type PlayerReview,
   type PositionAnalysis,
+  type SacrificeInfo,
   type Score,
   type SuggestedLine,
 } from './types';
 import { positionWhiteWinPercent, scoreToWinPercent, winPercentFor } from './winPercent';
 
 /** Bump when GameReview's shape or the classification rules change. */
-export const REVIEW_FORMAT_VERSION = 1;
+export const REVIEW_FORMAT_VERSION = 2;
 
 /** Maximum number of key moments highlighted in a review. */
 export const MAX_KEY_MOMENTS = 8;
@@ -49,7 +50,7 @@ export function buildGameReview(
 ): GameReview {
   const positions = analysedPrefix(analyses, game.moves.length + 1);
   const whiteWinPercents = positions.map(positionWhiteWinPercent);
-  const bookPlies = countBookPlies(game.moves, options.book);
+  let bookPlies = countBookPlies(game.moves, options.book);
 
   const moves: MoveReview[] = [];
   for (let i = 0; i + 1 < positions.length; i++) {
@@ -61,6 +62,7 @@ export function buildGameReview(
     if (!move || !before || !after || whiteBefore === undefined || whiteAfter === undefined) {
       break;
     }
+    if (i < bookPlies && leavesBook(move, before, after, whiteBefore, whiteAfter)) bookPlies = i;
     moves.push(
       reviewMove({
         move,
@@ -123,9 +125,15 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
   const legalMoves = legalMoveCount(move.fenBefore);
 
   // Sacrifice detection replays capture sequences, so only run it when the
-  // result can change the label (Brilliant needs a nearly lossless move).
-  const mayBeBrilliant = !inBook && legalMoves !== 1 && winLoss <= THRESHOLDS.brilliant.maxLoss;
-  const sacrifice = mayBeBrilliant ? detectSacrifice(move.fenBefore, move.uci) : null;
+  // result can change the label (Brilliant needs a nearly lossless move). Once the
+  // game is over on the board nothing can be taken, so nothing was offered.
+  const mayBeBrilliant =
+    !inBook &&
+    legalMoves !== 1 &&
+    after.terminal === undefined &&
+    winLoss <= THRESHOLDS.brilliant.maxLoss;
+  const sacrifice = mayBeBrilliant ? realSacrifice(move, after) : null;
+  const bestUci = before.lines[0]?.pv[0];
 
   const classification = classifyMove({
     color,
@@ -133,12 +141,17 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
     winBefore,
     winAfter,
     winSecondBest,
-    bestUci: before.lines[0]?.pv[0],
+    bestUci,
     legalMoveCount: legalMoves,
     inBook,
     previousMove: previousMove && { to: previousMove.to, wasCapture: !!previousMove.captured },
     isCapture: !!move.captured,
     to: move.to,
+    // Only needed to rule out Great, which only the engine's top move can be.
+    captureGain:
+      move.captured && move.uci === bestUci ? staticExchange(move.fenBefore, move.to) : undefined,
+    inCheck: previousMove ? previousMove.isCheck : isInCheck(move.fenBefore),
+    isCheckmate: move.isCheckmate,
     sacrifice,
     mateBefore: mateFor(before.lines[0]?.score, color),
     // Delivering checkmate is the end of a forced mate, not the loss of one.
@@ -195,6 +208,19 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
 }
 
 /**
+ * The move's sacrifice, unless the engine line after it wins the material straight back
+ * (material.isRegainedAtOnce): that is a trick, not a sacrifice. A line that ends in a
+ * forced mate for the mover keeps the sacrifice, whatever happens to the material.
+ */
+function realSacrifice(move: ParsedMove, after: PositionAnalysis): SacrificeInfo | null {
+  const sacrifice = detectSacrifice(move.fenBefore, move.uci);
+  const line = after.lines[0];
+  if (!sacrifice || !line) return sacrifice;
+  const mates = (mateFor(line.score, move.color) ?? 0) > 0;
+  return !mates && isRegainedAtOnce(move.fenBefore, move.uci, line.pv) ? null : sacrifice;
+}
+
+/**
  * The analyses usable for the review: the longest prefix without gaps, capped at
  * `maxLength`. A position the engine returned nothing for (no line, not terminal)
  * counts as a gap, so a bad analysis yields a partial review instead of a crash.
@@ -214,16 +240,37 @@ function analysedPrefix(
 /**
  * Number of leading moves that stay in the opening book. Once a move leaves the
  * book, later transpositions back into it do not count: the game is out of theory.
- * Computed over the whole game, independent of how far the analysis has got.
+ * A checkmate is never theory, even when a trap line in the book ends with it.
+ * Computed over the whole game, independent of how far the analysis has got
+ * (buildGameReview may end the book earlier, see leavesBook).
  */
 function countBookPlies(moves: ParsedMove[], book: OpeningBook | null): number {
   if (!book) return 0;
   let plies = 0;
   for (const move of moves) {
-    if (!book.has(move.fenAfter)) break;
+    if (move.isCheckmate || !book.has(move.fenAfter)) break;
     plies++;
   }
   return plies;
+}
+
+/**
+ * Whether a move in a book position ends the book anyway because the engine shows it
+ * throws the game away: it loses more than an Inaccuracy's worth of win % (unless it is
+ * the engine's own top move) or allows a forced mate. The book holds trap lines, such as
+ * Fool's Mate, that contain the losing move; that move is a decision to grade, not theory.
+ */
+function leavesBook(
+  move: ParsedMove,
+  before: PositionAnalysis,
+  after: PositionAnalysis,
+  whiteBefore: number,
+  whiteAfter: number,
+): boolean {
+  const loss = winPercentFor(whiteBefore, move.color) - winPercentFor(whiteAfter, move.color);
+  const isEngineBest = before.lines[0]?.pv[0] === move.uci;
+  if (!isEngineBest && loss > THRESHOLDS.loss.inaccuracy) return true;
+  return (mateFor(after.lines[0]?.score, move.color) ?? 0) < 0;
 }
 
 function openingAt(book: OpeningBook | null, fen: string): OpeningInfo | undefined {

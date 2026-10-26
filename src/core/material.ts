@@ -55,10 +55,13 @@ export function staticExchange(fen: string, square: Square): number {
  *   For each of the mover's pieces (not the king) after the move, compute how much
  *   the opponent could win on its square (staticExchange with the opponent to move),
  *   minus how much the opponent could already win on that piece's previous square
- *   before the move (a "null move" view of the position before; skipped = 0 when
- *   the mover was in check). The offered amount is the largest of these, minus the
- *   value of anything the move itself captured and any promotion gain.
+ *   before the move (a "null move" view of the position before, also when the mover
+ *   was in check: a piece that was already hanging, such as one caught in a fork, is
+ *   not offered by moving out of check). The offered amount is the largest of these,
+ *   minus the value of anything the move itself captured and any promotion gain.
  *   It is a sacrifice when the offered amount is >= THRESHOLDS.brilliant.minSacrifice.
+ *   A move that ends the game on the board (checkmate, stalemate or insufficient
+ *   material) offers nothing: no capture can follow it.
  *
  * @returns SacrificeInfo for the offered piece, or null.
  */
@@ -70,7 +73,8 @@ export function detectSacrifice(fenBefore: string, uci: string): SacrificeInfo |
 /**
  * The measurement behind {@link detectSacrifice}, without the threshold, so callers
  * and tests can see small or negative offers too.
- * Returns null for illegal or malformed moves, or when the mover only has a king.
+ * Returns null for illegal or malformed moves, for a move that ends the game, or when
+ * the mover only has a king.
  */
 export function measureOffer(fenBefore: string, uci: string): MaterialOffer | null {
   const parsed = parseUci(uci);
@@ -78,8 +82,10 @@ export function measureOffer(fenBefore: string, uci: string): MaterialOffer | nu
   if (!parsed || !chess) return null;
 
   const mover = chess.turn();
-  // A null move is illegal while in check, so there is no "before" view to compare with.
-  const before = chess.inCheck() ? null : loadPosition(nullMoveFen(fenBefore));
+  // The opponent to move in the position before. When the mover is in check this is not
+  // a legal position, but chess.js still generates the opponent's captures, and the
+  // impossible king captures do not matter: exchangeGain never targets the king.
+  const before = loadPosition(nullMoveFen(fenBefore));
 
   let move: Move;
   try {
@@ -87,6 +93,8 @@ export function measureOffer(fenBefore: string, uci: string): MaterialOffer | nu
   } catch {
     return null; // chess.js throws on illegal moves
   }
+  // chess.js would still let the opponent capture after the game has ended on the board.
+  if (chess.isCheckmate() || chess.isStalemate() || chess.isInsufficientMaterial()) return null;
   const rook = castlingRookMove(move);
 
   let best: { offered: number; square: Square; piece: PieceSymbol } | null = null;
@@ -113,6 +121,34 @@ export function measureOffer(fenBefore: string, uci: string): MaterialOffer | nu
     square: best.square,
     piece: best.piece,
   };
+}
+
+/**
+ * Whether the material a capturing or checking move puts on offer comes straight back,
+ * which makes it a trick rather than a sacrifice: in `line` (the engine line after the
+ * move, starting with the opponent's reply) the opponent captures, and after the mover's
+ * next move the mover is down less than THRESHOLDS.brilliant.minSacrifice compared with
+ * the position before the move. Typical cases: a rook check that is taken but uncovers an
+ * attack on the queen, or a capture that is taken back and then wins the piece back.
+ * Quiet moves always return false, as do lines too short to tell.
+ */
+export function isRegainedAtOnce(fenBefore: string, uci: string, line: readonly string[]): boolean {
+  const parsed = parseUci(uci);
+  const chess = loadPosition(fenBefore);
+  const [reply, answer] = line.map(parseUci);
+  if (!parsed || !chess || !reply || !answer) return false;
+  const mover = chess.turn();
+  try {
+    const move = chess.move(parsed);
+    if (!move.captured && !chess.inCheck()) return false;
+    if (!chess.move(reply).captured) return false; // the offer is declined
+    chess.move(answer);
+  } catch {
+    return false; // chess.js throws on illegal moves
+  }
+  const change = materialBalance(chess.fen()) - materialBalance(fenBefore);
+  const net = mover === 'w' ? change : -change;
+  return net > -THRESHOLDS.brilliant.minSacrifice;
 }
 
 // ---------------------------------------------------------------------------

@@ -123,6 +123,27 @@ describe('Chess.com paging', () => {
   });
 });
 
+describe('a player whose games cannot be loaded', () => {
+  const notFound = () => Object.assign(new Error('Not found'), { name: 'NotFoundError' });
+
+  it('does not report a found player as missing when the games request is not found', async () => {
+    vi.mocked(lichess.fetchLichessProfile).mockResolvedValue({ username: 'DrNykterstein' });
+    vi.mocked(lichess.fetchLichessGames).mockRejectedValue(notFound());
+    const error = await loadFirstPage('lichess', 'drnykterstein').catch((e: unknown) => e);
+    expect(classifyLoadError(error)).toBe('other');
+    expect((error as Error).message).toBe(
+      'Lichess found DrNykterstein but did not return their games.',
+    );
+  });
+
+  it('does the same for missing Chess.com archives', async () => {
+    vi.mocked(chesscom.fetchChessComProfile).mockResolvedValue({ username: 'hikaru' });
+    vi.mocked(chesscom.fetchChessComArchives).mockRejectedValue(notFound());
+    const error = await loadFirstPage('chesscom', 'hikaru').catch((e: unknown) => e);
+    expect(classifyLoadError(error)).toBe('other');
+  });
+});
+
 describe('Lichess paging', () => {
   // Each game starts 5 ms before it ends.
   const page = (start: number, count: number) =>

@@ -103,7 +103,7 @@ const VERBS: Record<Tense, { you: string; it: string }> = {
 /**
  * The mover's standing in the second person, e.g. "you are clearly better",
  * "the position was equal", "your opponent would be winning".
- * With `only`, a smaller advantage reads "you are only slightly better".
+ * With `only`, a small advantage reads "you are only slightly better".
  */
 function standing(moverWin: number, tense: Tense, { only = false } = {}): string {
   // Passing the mover's win % where White's is expected makes side 'w' mean the mover.
@@ -111,7 +111,7 @@ function standing(moverWin: number, tense: Tense, { only = false } = {}): string
   const verb = VERBS[tense];
   if (!side) return `the position ${verb.it} equal`;
   if (side === 'b') return `your opponent ${verb.it} ${level}`;
-  return `you ${verb.you} ${only && level !== 'winning' ? 'only ' : ''}${level}`;
+  return `you ${verb.you} ${only && level === 'slightly better' ? 'only ' : ''}${level}`;
 }
 
 /** Bucket of a win % from the mover's side: 3 = winning ... 0 = equal ... -3 = losing. */
@@ -298,12 +298,16 @@ function describeLoss(input: ExplainInput, loss: Loss, played: SettledLine): str
   const isRecapture = playedTo === reply.to && pieceAt(input.fenBefore, playedTo) !== null;
   if (victim && victim.color === color && !isRecapture) {
     const { type } = victim;
-    if (type === 'p' && loss.amount === 1) {
-      return `This loses the pawn on ${reply.to} to ${replySan}.`;
+    // The captured piece must be what is actually lost, not something traded back.
+    const change = materialChange(loss.referenceFen, played.fen, color);
+    if (type === 'p' && loss.amount === 1 && change.p <= -1) {
+      // A pawn taken back at once (exd5 cxd5) is a trade; the lost pawn is another one.
+      const takenBack = parseUci(playedLine?.pvUci[1] ?? '')?.to === reply.to;
+      if (!takenBack) return `This loses the pawn on ${reply.to} to ${replySan}.`;
     }
     if (type !== 'p' && type !== 'k') {
-      // The captured piece must be what is actually lost, not something traded back.
-      const lostOfType = -materialChange(loss.referenceFen, played.fen, color)[type];
+      // Knights and bishops are worth the same: a knight traded for a bishop is not lost.
+      const lostOfType = type === 'n' || type === 'b' ? -(change.n + change.b) : -change[type];
       if (lostOfType >= 1 && loss.amount >= PIECE_VALUES[type] / 2) {
         return `This hangs your ${PIECE_NAMES[type]} on ${reply.to}: ${replySan} wins it.`;
       }
@@ -503,6 +507,18 @@ function countOf(count: number, name: string): string {
   return count === 1 ? `a ${name}` : `${NUMBER_WORDS[count] ?? count} ${name}s`;
 }
 
+/**
+ * Cancels minor pieces taken against minor pieces given back (knights and bishops are
+ * worth the same), so a knight won for a bishop is no material at all.
+ */
+function netMinors(won: Material): Material {
+  const traded = Math.min(Math.abs(won.n), Math.abs(won.b));
+  if (traded === 0 || Math.sign(won.n) === Math.sign(won.b)) return won;
+  const n = won.n - Math.sign(won.n) * traded;
+  const b = won.b - Math.sign(won.b) * traded;
+  return { ...won, n, b };
+}
+
 /** "a rook and a bishop": the pieces (not pawns) with a negative count. */
 function piecesGivenBack(won: Material): string {
   return PIECES_BY_VALUE.filter((type) => won[type] < 0)
@@ -512,26 +528,27 @@ function piecesGivenBack(won: Material): string {
 
 /**
  * Names a material swing: "the queen", "a knight for a pawn", "the exchange", "two pawns".
- * `won` holds what changes hands in the direction being described (positive = taken).
+ * `changed` holds what changes hands in the direction being described (positive = taken).
  */
-function materialNoun(won: Material, kind: 'gain' | 'loss'): string {
+function materialNoun(changed: Material, kind: 'gain' | 'loss'): string {
+  const won = netMinors(changed);
   const top = PIECES_BY_VALUE.find((type) => won[type] > 0);
   if (!top) {
     const onlyPawns = PIECES_BY_VALUE.every((type) => won[type] === 0);
     return onlyPawns && won.p > 0 ? countOf(won.p, 'pawn') : 'material';
   }
 
+  const minors = won.n + won.b;
+  if (top === 'r' && won.r === 1 && minors === -1 && won.q >= 0) return 'the exchange';
+  const queen =
+    won.q === 1 ? (kind === 'gain' ? 'the queen' : 'your queen') : countOf(won.q, 'queen');
   const back = piecesGivenBack(won);
-  const minorsBack = -(Math.min(0, won.n) + Math.min(0, won.b));
-  if (top === 'r' && won.r === 1 && minorsBack === 1 && won.q >= 0) return 'the exchange';
-  const queen = kind === 'gain' ? 'the queen' : 'your queen';
   if (back) return top === 'q' ? `${queen} for ${back}` : 'material';
 
-  const minors = won.n + won.b;
   let noun: string;
   if (top === 'q') noun = queen;
-  else if (top === 'r') noun = 'a rook';
-  else if (minors > 1) noun = 'two pieces';
+  else if (top === 'r') noun = countOf(won.r, 'rook');
+  else if (minors > 1) noun = `${NUMBER_WORDS[minors] ?? minors} pieces`;
   else if (kind === 'loss') noun = 'a piece';
   else noun = won.n > 0 ? 'a knight' : 'a bishop';
 

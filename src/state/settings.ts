@@ -21,10 +21,17 @@ export interface SettingsState {
   /** Draw the classification badge on the destination square of the current move. */
   showBoardBadges: boolean;
   recent: RecentSearch[];
-  set: (patch: Partial<Omit<SettingsState, 'set' | 'addRecent' | 'clearRecent'>>) => void;
+  set: (
+    patch: Partial<Omit<SettingsState, 'set' | 'addRecent' | 'removeRecent' | 'clearRecent'>>,
+  ) => void;
   addRecent: (search: RecentSearch) => void;
+  /** Forgets one recent search (usernames match case-insensitively). */
+  removeRecent: (search: RecentSearch) => void;
   clearRecent: () => void;
 }
+
+const sameSearch = (a: RecentSearch, b: RecentSearch) =>
+  a.platform === b.platform && a.username.toLowerCase() === b.username.toLowerCase();
 
 const MAX_RECENT = 6;
 
@@ -66,17 +73,13 @@ export const useSettings = create<SettingsState>()(
       set: (patch) => set(patch),
       addRecent: (search) =>
         set((state) => ({
-          recent: [
-            search,
-            ...state.recent.filter(
-              (r) =>
-                !(
-                  r.platform === search.platform &&
-                  r.username.toLowerCase() === search.username.toLowerCase()
-                ),
-            ),
-          ].slice(0, MAX_RECENT),
+          recent: [search, ...state.recent.filter((r) => !sameSearch(r, search))].slice(
+            0,
+            MAX_RECENT,
+          ),
         })),
+      removeRecent: (search) =>
+        set((state) => ({ recent: state.recent.filter((r) => !sameSearch(r, search)) })),
       clearRecent: () => set({ recent: [] }),
     }),
     { name: 'kibitz-settings', version: 1, storage: createJSONStorage(() => safeStorage) },

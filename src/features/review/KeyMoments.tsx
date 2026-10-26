@@ -36,7 +36,7 @@ export function KeyMoments({ review, moves, currentPly, onSelect, className }: K
                 aria-current={active ? 'step' : undefined}
                 aria-label={`${moveNumberLabel(move.moveNumber, move.color)} ${move.san}, ${meta.label}`}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors',
+                  'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors lg:min-h-0',
                   'focus-visible:outline-2 focus-visible:outline-accent',
                   active
                     ? 'border-accent bg-accent/15 text-text'

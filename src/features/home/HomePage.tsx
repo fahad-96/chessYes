@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { useSettings, type Platform, type RecentSearch } from '@/state/settings';
+import { useSettings, type Platform } from '@/state/settings';
 import { ClassificationLegend } from './ClassificationLegend';
 import { HeroPreview } from './HeroPreview';
 import { PLATFORM_LABELS, parseUsernameInput, playerPath, validateUsername } from './username';
@@ -178,15 +178,8 @@ function SearchForm() {
 function RecentSearches() {
   const recent = useSettings((s) => s.recent);
   const addRecent = useSettings((s) => s.addRecent);
-  const set = useSettings((s) => s.set);
+  const remove = useSettings((s) => s.removeRecent);
   if (recent.length === 0) return null;
-
-  const remove = (target: RecentSearch) =>
-    set({
-      recent: recent.filter(
-        (r) => !(r.platform === target.platform && r.username === target.username),
-      ),
-    });
 
   return (
     <div className="mt-6 max-w-xl">
@@ -203,7 +196,7 @@ function RecentSearches() {
             <Link
               to={playerPath(r.platform, r.username)}
               onClick={() => addRecent(r)}
-              className="inline-flex h-8 min-w-0 items-center gap-2 rounded-l-full pr-1 pl-3 hover:text-accent"
+              className="inline-flex h-10 min-w-0 items-center gap-2 rounded-l-full pr-1 pl-3 hover:text-accent sm:h-8"
             >
               <span className="truncate font-medium">{r.username}</span>
               <span className="shrink-0 text-xs text-muted">{PLATFORM_LABELS[r.platform]}</span>
@@ -212,7 +205,7 @@ function RecentSearches() {
               type="button"
               onClick={() => remove(r)}
               aria-label={`Remove ${r.username} (${PLATFORM_LABELS[r.platform]}) from recent searches`}
-              className="mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-text"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-text sm:mr-1 sm:h-6 sm:w-6"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>

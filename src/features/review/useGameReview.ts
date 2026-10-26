@@ -72,6 +72,8 @@ export interface GameReviewState {
   review: GameReview | null;
   /** True while a deeper analysis runs and the previous, complete review is still shown. */
   showingPreviousAnalysis: boolean;
+  /** The preset of the analyses behind `review` (the previous one while a deeper run catches up). */
+  reviewPreset: Preset;
   /** Analyses exist but turning them into a review threw (details are in the console). */
   reviewFailed: boolean;
   analysis: AnalysisState;
@@ -404,6 +406,7 @@ export function useGameReview(gameId: string): GameReviewState {
     analyses: showingPreviousAnalysis && previous ? previous.analyses : analyses,
     review: showingPreviousAnalysis ? previousReview : liveReview,
     showingPreviousAnalysis,
+    reviewPreset: showingPreviousAnalysis && previous ? previous.preset : preset,
     reviewFailed: showingPreviousAnalysis ? previousBuilt.failed : live.failed,
     analysis: { status: status.status, progress, preset, message: status.message },
     canAnalyseDeeper:

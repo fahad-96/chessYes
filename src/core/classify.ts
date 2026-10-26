@@ -21,6 +21,15 @@ export interface ClassifyInput {
   /** Whether this move captures something, and on which square it lands. */
   isCapture: boolean;
   to: Square;
+  /**
+   * For a capture: the material the mover could win on `to` in the position before the
+   * move (material.staticExchange). Undefined or 0 when nothing could be won there.
+   */
+  captureGain?: number;
+  /** The mover was in check before the move. */
+  inCheck: boolean;
+  /** The move delivers checkmate. */
+  isCheckmate: boolean;
   /** Result of material.detectSacrifice for this move. */
   sacrifice: SacrificeInfo | null;
   /**
@@ -44,9 +53,11 @@ export interface ClassifyInput {
  *  4. Brilliant – base is Best/Excellent, loss <= brilliant.maxLoss, a sacrifice of at least
  *     brilliant.minSacrifice, winAfter >= brilliant.minWinAfter, and the second-best move
  *     does not also keep >= brilliant.maxSecondBestWin.
- *  5. Great     – base is Best and the move equals bestUci, a second-best move exists that is
- *     at least great.minGapToSecond worse and keeps < great.maxSecondBestWin, and the move is
- *     not a simple recapture on the square the opponent just captured on.
+ *  5. Great     – base is Best and the move equals bestUci, loss <= great.maxLoss, a second-best
+ *     move exists that is at least great.minGapToSecond worse and keeps < great.maxSecondBestWin,
+ *     and the move is not obvious: not an answer to a check, not checkmate itself, not a simple
+ *     recapture on the square the opponent just captured on, and not a capture that wins at
+ *     least great.obviousCaptureGain outright.
  *  6. Missed Win – base is Inaccuracy/Mistake/Blunder, winBefore >= missedWin.minWinBefore,
  *     missedWin.minWinAfter <= winAfter < missedWin.maxWinAfter, loss >= missedWin.minLoss.
  */
@@ -61,7 +72,7 @@ export function classifyMove(input: ClassifyInput): Classification {
   const base = mateLabel ? worseOf(lossLabel, mateLabel) : lossLabel;
 
   if (isBrilliant(input, base, loss)) return 'brilliant';
-  if (isGreat(input, base, isEngineBest)) return 'great';
+  if (isGreat(input, base, isEngineBest, loss)) return 'great';
   if (isMissedWin(input, base, loss)) return 'missedWin';
   return base;
 }
@@ -139,7 +150,12 @@ function isBrilliant(input: ClassifyInput, base: Classification, loss: number): 
 }
 
 /** Rule 5: the engine's top move when every alternative is clearly worse. */
-function isGreat(input: ClassifyInput, base: Classification, isEngineBest: boolean): boolean {
+function isGreat(
+  input: ClassifyInput,
+  base: Classification,
+  isEngineBest: boolean,
+  loss: number,
+): boolean {
   const rule = THRESHOLDS.great;
   if (base !== 'best' || !isEngineBest) return false;
   if (input.winSecondBest === undefined) return false;
@@ -147,13 +163,25 @@ function isGreat(input: ClassifyInput, base: Classification, isEngineBest: boole
   // gap is not distorted by the different depth of the search after the move.
   if (input.winBefore - input.winSecondBest < rule.minGapToSecond) return false;
   if (input.winSecondBest >= rule.maxSecondBestWin) return false;
-  // Taking back a piece is usually the only move, but it is obvious, not great.
+  // The top move of a search that the search after it refutes was not a great find.
+  if (loss > rule.maxLoss) return false;
+  return !isObvious(input);
+}
+
+/**
+ * Moves that are often the only good move but take no finding: answering a check (there
+ * are few options), delivering checkmate (the end of a mate, not the decision that won),
+ * taking back a piece on the square the opponent just captured on, and capturing a piece
+ * that was simply hanging.
+ */
+function isObvious(input: ClassifyInput): boolean {
+  if (input.inCheck || input.isCheckmate) return true;
+  if (!input.isCapture) return false;
   const isRecapture =
     input.previousMove !== undefined &&
     input.previousMove.wasCapture &&
-    input.isCapture &&
     input.to === input.previousMove.to;
-  return !isRecapture;
+  return isRecapture || (input.captureGain ?? 0) >= THRESHOLDS.great.obviousCaptureGain;
 }
 
 /** Rule 6: the player had a winning position and let it slip to roughly equal. */

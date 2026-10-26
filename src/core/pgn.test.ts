@@ -261,6 +261,11 @@ describe('splitPgnGames', () => {
     ]);
   });
 
+  it('accepts the "½-½" draw marker some exporters write', () => {
+    expect(parsePgn('1. e4 e5 ½-½').moves).toHaveLength(2);
+    expect(splitPgnGames('1. e4 e5 ½-½ 1. d4 d5 1-0')).toEqual(['1. e4 e5 ½-½', '1. d4 d5 1-0']);
+  });
+
   it('does not split inside comments that look like tags', () => {
     const text =
       '[Event "a"]\n\n1. e4 {note:\n[Event "not a tag"]\n} e5 *\n\n[Event "b"]\n\n1. d4 *';

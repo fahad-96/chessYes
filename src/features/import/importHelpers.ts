@@ -64,3 +64,66 @@ export function summarizePgnHeaders(headers: Record<string, string>): PgnSummary
     event: clean(headers.Event),
   };
 }
+
+/** Shown when the text holds no game at all. */
+export const NO_GAMES_MESSAGE =
+  'No games found. A PGN has moves like “1. e4 e5 2. Nf3”, usually after tags like [White "…"].';
+
+/** What a pasted link points to, when the whole text is a link to a single game. */
+export type GameLink = { site: 'lichess'; gameId: string } | { site: 'chesscom' };
+
+// lichess.org/<8-char id>, optionally with the 4-char player suffix, /white or /black, #ply.
+const LICHESS_GAME_URL_RE =
+  /^(?:https?:\/\/)?(?:www\.)?lichess\.org\/([A-Za-z0-9]{8})(?:[A-Za-z0-9]{4})?(?:\/(?:white|black))?\/?(?:[?#]\S*)?$/i;
+// Lichess pages whose path also has 8 letters.
+const LICHESS_PAGES = new Set([
+  'analysis',
+  'features',
+  'insights',
+  'practice',
+  'settings',
+  'training',
+]);
+const CHESSCOM_GAME_URL_RE =
+  /^(?:https?:\/\/)?(?:www\.)?chess\.com\/(?:(?:analysis\/)?game\/(?:live|daily)|live\/game|daily\/game|game)\/\d+/i;
+
+/** Recognises a pasted game link (instead of a PGN). */
+export function parseGameLink(text: string): GameLink | null {
+  const input = text.trim();
+  const lichess = LICHESS_GAME_URL_RE.exec(input);
+  const gameId = lichess?.[1];
+  if (gameId && !LICHESS_PAGES.has(gameId.toLowerCase())) return { site: 'lichess', gameId };
+  return CHESSCOM_GAME_URL_RE.test(input) ? { site: 'chesscom' } : null;
+}
+
+export const CHESSCOM_LINK_MESSAGE =
+  'That is a Chess.com game link. Kibitz cannot open those directly: search for the player on ' +
+  'the home page and pick the game from their list, or copy the PGN on Chess.com ' +
+  '(Share → PGN) and paste it here.';
+
+const FEN_RE = /^[pnbrqkPNBRQK1-8]+(?:\/[pnbrqkPNBRQK1-8]+){7}(?:\s|$)/;
+const URL_RE = /^(?:https?:\/\/|www\.)\S+$/i;
+
+/**
+ * A clearer message than "Illegal move 1. …" for text that is not a PGN at all: a FEN,
+ * a link, or text without tags or move numbers that fails on its very first word.
+ * Returns null when the text looks like a PGN, so the parser's own message stays.
+ */
+export function notPgnMessage(text: string, parseError: string): string | null {
+  const input = text.trim();
+  if (FEN_RE.test(input)) {
+    return (
+      'That looks like a FEN, which describes a single position. ' +
+      'Kibitz reviews whole games: paste the PGN of the game, with its moves.'
+    );
+  }
+  if (URL_RE.test(input)) {
+    return (
+      'That is a link, not a PGN. Kibitz opens Lichess game links directly; for other sites, ' +
+      'copy the game’s PGN (usually under Share or Download) and paste it here.'
+    );
+  }
+  const failsOnFirstMove = /^Illegal move 1\.{1,3} /.test(parseError);
+  const looksLikePgn = /^\s*\[/m.test(input) || /\b\d+\.\s*\S/.test(input);
+  return failsOnFirstMove && !looksLikePgn ? NO_GAMES_MESSAGE : null;
+}

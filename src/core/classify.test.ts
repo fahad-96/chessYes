@@ -27,6 +27,8 @@ const QUIET: ClassifyInput = {
   inBook: false,
   isCapture: false,
   to: 'f3',
+  inCheck: false,
+  isCheckmate: false,
   sacrifice: null,
 };
 
@@ -197,9 +199,46 @@ describe('classifyMove: Great', () => {
 
   it('measures the gap from the best line before the move', () => {
     // The search after the move saw less, but both lines of the same search still differ by 15.
-    expect(classify({ ...GREAT_INPUT, winBefore: 55, winAfter: 48, winSecondBest: 40 })).toBe(
+    expect(classify({ ...GREAT_INPUT, winBefore: 55, winAfter: 51, winSecondBest: 40 })).toBe(
       'great',
     );
+  });
+
+  it('requires the search after the move to confirm it (loss <= maxLoss)', () => {
+    const after = (loss: number) => classify({ ...GREAT_INPUT, winAfter: 55 - loss });
+    expect(after(GREAT.maxLoss)).toBe('great');
+    // Still the engine's top move, so still Best.
+    expect(after(GREAT.maxLoss + EPS)).toBe('best');
+  });
+
+  it('is never Great when answering a check', () => {
+    expect(classify({ ...GREAT_INPUT, inCheck: true })).toBe('best');
+  });
+
+  it('is never Great for the move that delivers checkmate', () => {
+    expect(classify({ ...GREAT_INPUT, isCheckmate: true, mateAfter: 0 })).toBe('best');
+    // Brilliant still takes precedence (a mating move cannot offer material in practice).
+    expect(classify({ ...BRILLIANT_INPUT, winSecondBest: 30, isCheckmate: true })).toBe(
+      'brilliant',
+    );
+  });
+
+  it('is not Great for a capture that simply wins material', () => {
+    const capture = { ...GREAT_INPUT, isCapture: true };
+    expect(classify({ ...capture, captureGain: GREAT.obviousCaptureGain })).toBe('best');
+    expect(classify({ ...capture, captureGain: GREAT.obviousCaptureGain - 1 })).toBe('great');
+    expect(classify({ ...capture, captureGain: 0 })).toBe('great');
+    // The gain only matters for captures.
+    expect(classify({ ...GREAT_INPUT, captureGain: 5 })).toBe('great');
+  });
+
+  it('keeps the documented thresholds', () => {
+    expect(GREAT).toEqual({
+      minGapToSecond: 15,
+      maxSecondBestWin: 70,
+      maxLoss: 5,
+      obviousCaptureGain: 2,
+    });
   });
 
   it('is not Great when the second-best move still keeps maxSecondBestWin', () => {
@@ -239,7 +278,13 @@ describe('classifyMove: Missed Win', () => {
 
   it('requires a winning position before the move', () => {
     expect(missed(MISSED.minWinBefore, MISSED.maxWinAfter - EPS)).toBe('missedWin');
-    expect(missed(MISSED.minWinBefore - EPS, 50)).toBe('mistake');
+    expect(missed(MISSED.minWinBefore - EPS, MISSED.maxWinAfter - EPS)).toBe('mistake');
+    // About +2.5 slipping to +0.8 is not a winning position thrown away.
+    expect(missed(72.8, 57.5)).toBe('mistake');
+  });
+
+  it('keeps the documented thresholds', () => {
+    expect(MISSED).toEqual({ minWinBefore: 75, maxWinAfter: 60, minWinAfter: 40, minLoss: 10 });
   });
 
   it('uses a half-open interval [minWinAfter, maxWinAfter) for the position after', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, type ComponentType } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
 import { FileUp, Info, ScanSearch, Settings } from 'lucide-react';
 import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { GithubIcon } from '@/components/ui/GithubIcon';
@@ -35,6 +35,7 @@ export function Layout() {
   const theme = useSettings((s) => s.theme);
   const boardTheme = useSettings((s) => s.boardTheme);
   useDocumentTheme(theme, boardTheme);
+  useFocusOnNavigation();
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -81,7 +82,8 @@ function Header() {
                 title={item.label}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'inline-flex h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors md:px-3',
+                  // 40px tap targets on phones; compact once the labels show.
+                  'inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors md:h-9 md:min-w-0 md:px-3',
                   active
                     ? 'bg-surface-2 text-text'
                     : 'text-muted hover:bg-surface-2 hover:text-text',
@@ -98,7 +100,8 @@ function Header() {
             target="_blank"
             rel="noopener noreferrer"
             title="Source code on GitHub"
-            className="ml-0.5 inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            // Hidden on phones to leave room for full-size nav targets; the footer links it too.
+            className="ml-0.5 hidden h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text sm:inline-flex"
           >
             <GithubIcon className="h-[18px] w-[18px]" />
             <span className="sr-only">Source code on GitHub</span>
@@ -143,6 +146,21 @@ function Footer() {
       </div>
     </footer>
   );
+}
+
+/**
+ * After a route change, moves focus to the page content, so keyboard and screen-reader
+ * users start on the new page instead of on <body> (the link they activated is gone).
+ * The first render is skipped: on page load the browser's own focus handling is right.
+ */
+function useFocusOnNavigation() {
+  const { pathname } = useLocation();
+  const previous = useRef(pathname);
+  useEffect(() => {
+    if (previous.current === pathname) return;
+    previous.current = pathname;
+    document.getElementById('main')?.focus({ preventScroll: true });
+  }, [pathname]);
 }
 
 /**

@@ -137,7 +137,7 @@ export function SummaryCard({
             type="button"
             onClick={() => setShowAll((value) => !value)}
             aria-expanded={showAll}
-            className="mt-2 inline-flex items-center gap-1 rounded-md text-xs text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+            className="mt-1 inline-flex min-h-10 items-center gap-1 rounded-md pr-2 text-xs text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
           >
             {showAll ? (
               <ChevronUp aria-hidden="true" className="h-3.5 w-3.5" />

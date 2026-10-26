@@ -221,10 +221,13 @@ describe('useGameReview', () => {
     expect(result.current.analysis.preset.id).toBe('deep');
     expect(result.current.showingPreviousAnalysis).toBe(true);
     expect(result.current.review?.moves).toHaveLength(2);
+    // The numbers on screen still come from the earlier preset.
+    expect(result.current.reviewPreset.id).not.toBe('deep');
 
     await act(async () => finishDeep());
     await waitFor(() => expect(result.current.analysis.status).toBe('done'));
     expect(result.current.showingPreviousAnalysis).toBe(false);
+    expect(result.current.reviewPreset.id).toBe('deep');
   });
 
   it('reports an engine that cannot start', async () => {

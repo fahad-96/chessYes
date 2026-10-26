@@ -53,6 +53,11 @@ export function pvToSan(fen: string, pv: string[]): string[] {
   return sans;
 }
 
+/** Whether the side to move is in check. */
+export function isInCheck(fen: string): boolean {
+  return new Chess(fen).inCheck();
+}
+
 /** Number of legal moves for the side to move. */
 export function legalMoveCount(fen: string): number {
   return new Chess(fen).moves().length;

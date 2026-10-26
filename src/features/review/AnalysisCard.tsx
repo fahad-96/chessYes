@@ -10,16 +10,42 @@ export interface AnalysisCardProps {
   analysis: AnalysisState;
   totalPlies: number;
   showingPreviousAnalysis: boolean;
+  /** Label of the preset whose review is shown while a deeper run catches up, e.g. "Standard". */
+  previousPresetLabel?: string;
   onStop: () => void;
   onResume: () => void;
   className?: string;
 }
 
+/** What screen readers hear when the run changes state (never on every progress step). */
+const ANNOUNCEMENTS: Record<AnalysisState['status'], string> = {
+  preparing: '',
+  running: 'Analysis started.',
+  paused: 'Analysis paused.',
+  done: 'Analysis finished.',
+  'engine-error': '',
+  failed: 'Analysis stopped unexpectedly.',
+};
+
 /** Progress of the engine run, with Stop / Resume. Hidden once the analysis is done. */
-export function AnalysisCard({
+export function AnalysisCard(props: AnalysisCardProps) {
+  return (
+    <>
+      {/* Always rendered, so the region exists before its text changes. The visible detail
+          line changes on every depth and estimate, which would be read out for minutes. */}
+      <p aria-live="polite" className="sr-only">
+        {ANNOUNCEMENTS[props.analysis.status]}
+      </p>
+      <AnalysisCardBody {...props} />
+    </>
+  );
+}
+
+function AnalysisCardBody({
   analysis,
   totalPlies,
   showingPreviousAnalysis,
+  previousPresetLabel,
   onStop,
   onResume,
   className,
@@ -52,6 +78,10 @@ export function AnalysisCard({
   } else if (status === 'running') {
     title = `Analysing with Stockfish${deeperNote}`;
     detail = progress ? progressText(progress, totalPlies) : 'Starting…';
+  } else if (status === 'paused' && showingPreviousAnalysis) {
+    title = 'Deeper analysis paused';
+    const shown = previousPresetLabel ? `the ${previousPresetLabel.toLowerCase()}` : 'the earlier';
+    detail = `${analysedMoves} of ${totalPlies} moves re-analysed. Showing ${shown} analysis until it finishes.`;
   } else if (status === 'paused') {
     title = 'Analysis paused';
     detail = `${analysedMoves} of ${totalPlies} moves analysed. Resume any time; finished work is saved.`;
@@ -74,9 +104,7 @@ export function AnalysisCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{title}</p>
-          <p className="tabular text-xs text-muted" aria-live="polite">
-            {detail}
-          </p>
+          <p className="tabular text-xs text-muted">{detail}</p>
         </div>
         {status === 'running' && (
           <Button size="sm" onClick={onStop} aria-label="Stop analysis">

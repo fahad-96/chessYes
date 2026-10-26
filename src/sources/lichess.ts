@@ -1,8 +1,9 @@
 import { START_FEN } from '@/core/notation';
+import { readPgnHeaders } from '@/core/pgn';
 import type { GameRecord, GameResult, PlayerInfo, TimeClass } from '@/core/types';
 import type { FetchOptions } from './http';
 import { fetchJson, fetchText, NotFoundError } from './http';
-import { isRecord, num, str } from './util';
+import { isGameResult, isRecord, num, str } from './util';
 
 /**
  * Lichess API client (https://lichess.org/api). CORS-enabled, no key needed.
@@ -129,7 +130,17 @@ const TIME_CLASSES: Record<string, TimeClass> = {
 };
 
 /** Statuses that end in a draw when there is no winner. */
-const DRAW_STATUSES = new Set(['draw', 'stalemate', 'outoftime', 'timeout', 'variantEnd']);
+const DRAW_STATUSES = new Set([
+  'draw',
+  'stalemate',
+  'outoftime',
+  'timeout',
+  'variantEnd',
+  'insufficientMaterialClaim',
+]);
+
+/** Statuses of games that have no result (yet). */
+const UNFINISHED_STATUSES = new Set(['created', 'started', 'aborted']);
 
 /**
  * Maps a Lichess game JSON object to a GameRecord. id = `lichess/<id>`.
@@ -148,6 +159,7 @@ export function mapLichessGame(game: unknown): GameRecord {
   const black = lichessPlayer(players.black);
   const status = str(game.status) ?? 'unknownFinish';
   const winner = game.winner === 'white' ? white : game.winner === 'black' ? black : undefined;
+  const rawPgn = str(game.pgn)?.trim();
   const result: GameResult =
     game.winner === 'white'
       ? '1-0'
@@ -155,9 +167,11 @@ export function mapLichessGame(game: unknown): GameRecord {
         ? '0-1'
         : DRAW_STATUSES.has(status)
           ? '1/2-1/2'
-          : '*';
+          : UNFINISHED_STATUSES.has(status)
+            ? '*'
+            : headerResult(rawPgn);
   const opening = isRecord(game.opening) ? game.opening : {};
-  const pgn = str(game.pgn)?.trim() || pgnFromMoves(game, white, black, result);
+  const pgn = rawPgn || pgnFromMoves(game, white, black, result);
   if (!pgn) throw new Error(`Lichess game ${id} has no moves.`);
 
   return {
@@ -178,6 +192,15 @@ export function mapLichessGame(game: unknown): GameRecord {
     variant: lichessVariant(game.variant),
     pgn,
   };
+}
+
+/**
+ * The PGN's Result tag, or '*'. Used for endings this client does not know by status
+ * (Lichess adds new ones), so a finished game is not shown as unfinished.
+ */
+function headerResult(pgn: string | undefined): GameResult {
+  const result = pgn ? readPgnHeaders(pgn).Result : undefined;
+  return isGameResult(result) ? result : '*';
 }
 
 function lichessPlayer(value: unknown): PlayerInfo {
@@ -212,6 +235,8 @@ function describeTermination(status: string, winner: string | undefined): string
       return won('(opponent did not move)', 'Game did not start');
     case 'variantEnd':
       return won('(variant rules)', 'Draw (variant rules)');
+    case 'insufficientMaterialClaim':
+      return 'Draw (insufficient material)';
     case 'aborted':
       return 'Game aborted';
     case 'created':

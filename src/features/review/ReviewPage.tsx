@@ -130,6 +130,8 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
     () => arrowsForMove(moveReview, showBestMoveArrow),
     [moveReview, showBestMoveArrow],
   );
+  // The arrow switch is only offered where the move has an arrow to show.
+  const hasArrow = useMemo(() => arrowsForMove(moveReview, true).length > 0, [moveReview]);
   const badge = useMemo<BoardBadge | null>(
     () =>
       showBoardBadges && move && moveReview
@@ -178,7 +180,8 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
   );
 
   const openingName = review?.opening?.name ?? record.openingName ?? null;
-  const engineLabel = `${ENGINE_NAME} · depth ${analysis.preset.depth}`;
+  // The engine settings behind the numbers on screen, not those of a deeper run in progress.
+  const engineLabel = `${ENGINE_NAME} · depth ${state.reviewPreset.depth}`;
 
   const boardBlock = (
     <div className="flex w-full gap-2 lg:gap-3">
@@ -190,7 +193,8 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
           className={cn('shrink-0', isDesktop ? 'w-6' : 'w-2.5')}
         />
       )}
-      <div className="min-w-0 flex-1 touch-pan-y" {...swipeHandlers}>
+      {/* Horizontal swipes step through the game; vertical scrolling and pinch-zoom stay native. */}
+      <div className="min-w-0 flex-1 touch-pan-y touch-pinch-zoom" {...swipeHandlers}>
         <Board
           fen={fen}
           orientation={orientation}
@@ -208,6 +212,7 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
       analysis={analysis}
       totalPlies={totalPlies}
       showingPreviousAnalysis={state.showingPreviousAnalysis}
+      previousPresetLabel={state.reviewPreset.label}
       onStop={state.stop}
       onResume={state.resume}
     />
@@ -237,6 +242,7 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
       openingName={openingName}
       analysisStatus={analysis.status}
       reviewFailed={state.reviewFailed}
+      hasArrow={hasArrow}
       showArrow={showBestMoveArrow}
       onToggleArrow={(show) => updateSettings({ showBestMoveArrow: show })}
       onStart={start}
@@ -278,8 +284,15 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
     <KeyMoments review={review} moves={game.moves} currentPly={ply} onSelect={seek} />
   );
 
-  const nav = (className?: string) => (
-    <BoardNav ply={ply} totalPlies={totalPlies} onSeek={seek} onFlip={flip} className={className} />
+  const nav = (className?: string, framed?: boolean) => (
+    <BoardNav
+      ply={ply}
+      totalPlies={totalPlies}
+      onSeek={seek}
+      onFlip={flip}
+      framed={framed}
+      className={className}
+    />
   );
 
   if (isDesktop) {
@@ -296,11 +309,14 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
             {renderStrip(bottomColor)}
             {nav('mt-1')}
           </section>
+          {/* Once the user steps through the game, the current move and the graph come first
+              so they stay next to the board instead of below the fold. */}
           <aside aria-label="Game review" className="flex min-w-0 flex-col gap-4">
             {analysisCard}
-            {summaryCard}
+            {ply === 0 && summaryCard}
             {currentMoveCard}
             {graphCard}
+            {ply > 0 && summaryCard}
             {movesCard}
             {keyMoments}
           </aside>
@@ -310,29 +326,34 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
   }
 
   return (
-    // The app layout already provides the 16px side gutters.
-    <div className="mx-auto w-full max-w-2xl">
-      <ReviewHeader record={record} review={review} compact />
-      <section aria-label="Board" className="mt-3 flex flex-col gap-1.5">
-        {renderStrip(topColor)}
-        {boardBlock}
-        {renderStrip(bottomColor)}
-      </section>
-      <div className="mt-3 flex flex-col gap-3">
-        {analysisCard}
-        {currentMoveCard}
-        {graphCard}
-        {summaryCard}
-        {movesCard}
-        {keyMoments}
+    <div className="w-full">
+      {/* The app layout already provides the 16px side gutters. */}
+      <div className="mx-auto w-full max-w-2xl">
+        <ReviewHeader record={record} review={review} compact />
+        {/* On tablets the board is also limited by the screen height, so the current move
+            stays visible above the move bar. */}
+        <section
+          aria-label="Board"
+          className="mt-3 flex flex-col gap-1.5 md:mx-auto md:max-w-[max(20rem,calc(100dvh-30rem))]"
+        >
+          {renderStrip(topColor)}
+          {boardBlock}
+          {renderStrip(bottomColor)}
+        </section>
+        <div className="mt-3 flex flex-col gap-3">
+          {analysisCard}
+          {currentMoveCard}
+          {graphCard}
+          {summaryCard}
+          {movesCard}
+          {keyMoments}
+        </div>
       </div>
-      {/* Last child of the page so it stays pinned to the bottom of the screen. */}
-      {nav(
-        cn(
-          'sticky bottom-0 z-20 -mx-4 mt-3 rounded-none border-x-0 border-b-0 bg-surface/95 backdrop-blur',
-          'pb-[max(0.25rem,env(safe-area-inset-bottom))]',
-        ),
-      )}
+      {/* Last child of the page so it stays pinned to the bottom of the screen. The bar spans
+          the full width (the -mx-4 undoes the layout gutters); the buttons stay centred. */}
+      <div className="sticky bottom-0 z-20 -mx-4 mt-3 border-t border-line bg-surface/95 px-4 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
+        {nav('mx-auto max-w-2xl', false)}
+      </div>
     </div>
   );
 }

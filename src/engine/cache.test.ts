@@ -72,27 +72,27 @@ describe('analysis cache', () => {
     const before = Date.now();
     await saveAnalyses('envelope', [start]);
     const raw = await get('envelope', rawStore);
-    expect(raw).toMatchObject({ v: 1, analyses: [start] });
+    expect(raw).toMatchObject({ v: 2, analyses: [start] });
     expect(raw.savedAt).toBeGreaterThanOrEqual(before);
   });
 
   it('rejects stored data with the wrong shape', async () => {
     const cases: [string, unknown][] = [
       ['not-an-object', 'hello'],
-      ['old-version', { v: 0, savedAt: 1, analyses: [start] }],
-      ['no-array', { v: 1, savedAt: 1, analyses: 'x' }],
-      ['bad-entry', { v: 1, savedAt: 1, analyses: [{ fen: 1, depth: 2, lines: [] }] }],
+      ['old-version', { v: 1, savedAt: 1, analyses: [start] }],
+      ['no-array', { v: 2, savedAt: 1, analyses: 'x' }],
+      ['bad-entry', { v: 2, savedAt: 1, analyses: [{ fen: 1, depth: 2, lines: [] }] }],
       [
         'bad-score',
         {
-          v: 1,
+          v: 2,
           savedAt: 1,
           analyses: [
             { ...start, lines: [{ pv: ['e2e4'], score: { type: 'x', value: 1 }, depth: 1 }] },
           ],
         },
       ],
-      ['bad-terminal', { v: 1, savedAt: 1, analyses: [{ ...mated, terminal: 'resigned' }] }],
+      ['bad-terminal', { v: 2, savedAt: 1, analyses: [{ ...mated, terminal: 'resigned' }] }],
     ];
     for (const [key, value] of cases) {
       await set(key, value, rawStore);

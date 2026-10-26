@@ -146,7 +146,7 @@ export const EvalGraph = memo(function EvalGraph({
         if (event.pointerType === 'mouse') setHoverPly(null);
       }}
       className={cn(
-        'relative cursor-pointer touch-pan-y rounded-sm select-none',
+        'relative cursor-pointer touch-pan-y touch-pinch-zoom rounded-sm select-none',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         className,
       )}

@@ -4,6 +4,8 @@
  * Design tokens. Colours are CSS variables so light/dark themes swap in one
  * place; Tailwind utilities (bg-surface, text-muted, border-line, ...) map to them.
  * Theme: [data-theme="light"|"dark"] on <html>, falling back to the OS setting.
+ * The light theme darkens every colour used for text (classifications, accent,
+ * success, danger) so it reaches 4.5:1 on white and on the light surfaces.
  */
 :root {
   color-scheme: dark;
@@ -52,10 +54,23 @@
     --line: #dce2e8;
     --text: #151a20;
     --muted: #5d6874;
-    --accent: #c98a12;
-    --accent-strong: #a8720a;
+    --accent: #8a5c00;
+    --accent-strong: #704a00;
     --accent-fg: #ffffff;
+    --danger: #b8232a;
+    --success: #17732f;
     --eval-black: #3a434d;
+    --c-brilliant: #0a6b7d;
+    --c-great: #2f5fc4;
+    --c-best: #17732f;
+    --c-excellent: #36702a;
+    --c-good: #5f6b0f;
+    --c-book: #8a5a2b;
+    --c-forced: #5d6874;
+    --c-inaccuracy: #805a00;
+    --c-mistake: #a84608;
+    --c-blunder: #c02626;
+    --c-missedWin: #9c2fa3;
   }
 }
 
@@ -68,10 +83,23 @@
   --line: #dce2e8;
   --text: #151a20;
   --muted: #5d6874;
-  --accent: #c98a12;
-  --accent-strong: #a8720a;
+  --accent: #8a5c00;
+  --accent-strong: #704a00;
   --accent-fg: #ffffff;
+  --danger: #b8232a;
+  --success: #17732f;
   --eval-black: #3a434d;
+  --c-brilliant: #0a6b7d;
+  --c-great: #2f5fc4;
+  --c-best: #17732f;
+  --c-excellent: #36702a;
+  --c-good: #5f6b0f;
+  --c-book: #8a5a2b;
+  --c-forced: #5d6874;
+  --c-inaccuracy: #805a00;
+  --c-mistake: #a84608;
+  --c-blunder: #c02626;
+  --c-missedWin: #9c2fa3;
 }
 
 /* Board themes (Settings → Board). */

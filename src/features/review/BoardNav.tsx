@@ -7,6 +7,8 @@ export interface BoardNavProps {
   totalPlies: number;
   onSeek: (ply: number) => void;
   onFlip: () => void;
+  /** Draws its own border and background (false when a parent bar provides them). */
+  framed?: boolean;
   className?: string;
 }
 
@@ -46,14 +48,22 @@ function NavButton({
 }
 
 /** First / previous / next / last move and flip board. */
-export function BoardNav({ ply, totalPlies, onSeek, onFlip, className }: BoardNavProps) {
+export function BoardNav({
+  ply,
+  totalPlies,
+  onSeek,
+  onFlip,
+  framed = true,
+  className,
+}: BoardNavProps) {
   const atStart = ply <= 0;
   const atEnd = ply >= totalPlies;
   return (
     <nav
       aria-label="Move navigation"
       className={cn(
-        'flex items-center gap-1 rounded-2xl border border-line bg-surface p-1',
+        'flex items-center gap-1 p-1',
+        framed && 'rounded-2xl border border-line bg-surface',
         className,
       )}
     >

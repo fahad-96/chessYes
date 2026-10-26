@@ -3,6 +3,8 @@ import { START_FEN } from '@/core/notation';
 import { ENGINE_FILE, StockfishEngine, type AnalyzeRequest } from './stockfish';
 
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+/** 1.e4 e5 2.Nf3 d6 3.d4: Black to move, with ...Be6, ...Be7, ...Nf6 and ...exd4 legal. */
+const PHILIDOR = 'rnbqkbnr/ppp2ppp/3p4/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3';
 
 /**
  * Stands in for the Web Worker: records commands and answers the handshake.
@@ -344,6 +346,74 @@ describe('StockfishEngine.analyze', () => {
     engine.terminate();
     await expect(promise).rejects.toThrow('The engine was shut down.');
     expect(latestWorker().terminated).toBe(true);
+  });
+
+  it('never mixes iterations when the time cap stops a search mid-iteration', async () => {
+    // Real Stockfish output: depth 12 re-searched f8e7 with only a bound, and its line 2
+    // repeats the depth-11 line 1. Filling each slot on its own gave [c8e6, c8e6]; both
+    // lines now come from depth 11, the deepest iteration with every line.
+    const engine = new StockfishEngine();
+    const promise = engine.analyze(request({ fen: PHILIDOR, initialFen: PHILIDOR, moves: [] }));
+    await sentCommand(latestWorker, 'go depth 3 movetime 1000');
+    latestWorker().emit(
+      'info depth 11 multipv 1 score cp -29 pv c8e6 b1c3',
+      'info depth 11 multipv 2 score cp -31 pv f8e7 b1c3',
+      'info depth 12 multipv 1 score cp -27 lowerbound pv f8e7',
+      'info depth 12 multipv 2 score cp -28 pv c8e6 b1c3',
+      'bestmove f8e7',
+    );
+    const result = await promise;
+    expect(result.lines.map((line) => [line.pv[0], line.depth])).toEqual([
+      ['c8e6', 11],
+      ['f8e7', 11],
+    ]);
+    expect(result.depth).toBe(11);
+  });
+
+  it("takes a deeper line 1 that is the engine's choice and keeps a different line 2", async () => {
+    // The best move changed at depth 10, and line 2 was cut off with only a bound.
+    const engine = new StockfishEngine();
+    const promise = engine.analyze(request({ fen: PHILIDOR, initialFen: PHILIDOR, moves: [] }));
+    await sentCommand(latestWorker, 'go depth 3 movetime 1000');
+    latestWorker().emit(
+      'info depth 9 multipv 1 score cp -20 pv g8f6 b1c3',
+      'info depth 9 multipv 2 score cp -35 pv e5d4 f3d4',
+      'info depth 10 multipv 1 score cp -25 pv e5d4 f3d4',
+      'info depth 10 multipv 2 score cp -30 upperbound pv g8f6',
+      'bestmove e5d4',
+    );
+    const result = await promise;
+    expect(result.lines.map((line) => [line.pv[0], line.depth])).toEqual([
+      ['e5d4', 10],
+      ['g8f6', 9],
+    ]);
+    expect(result.depth).toBe(10);
+  });
+
+  it("ignores a deeper line 1 that is not the engine's final choice", async () => {
+    const engine = new StockfishEngine();
+    const promise = engine.analyze(request({ fen: PHILIDOR, initialFen: PHILIDOR, moves: [] }));
+    await sentCommand(latestWorker, 'go depth 3 movetime 1000');
+    latestWorker().emit(
+      'info depth 9 multipv 1 score cp -20 pv g8f6 b1c3',
+      'info depth 9 multipv 2 score cp -35 pv e5d4 f3d4',
+      'info depth 10 multipv 1 score cp -25 pv b8c6 d4d5',
+      'bestmove g8f6',
+    );
+    const result = await promise;
+    expect(result.lines.map((line) => line.pv[0])).toEqual(['g8f6', 'e5d4']);
+  });
+
+  it('takes the deepest line per slot, without repeats, when no iteration is complete', async () => {
+    const engine = new StockfishEngine();
+    const promise = engine.analyze(request());
+    await sentCommand(latestWorker, 'go depth 3 movetime 1000');
+    latestWorker().emit(
+      'info depth 2 multipv 1 score cp 20 pv e7e5',
+      'info depth 1 multipv 2 score cp 30 pv e7e5',
+      'bestmove e7e5',
+    );
+    expect((await promise).lines.map((line) => line.pv[0])).toEqual(['e7e5']);
   });
 
   it('returns no lines for a position without legal moves', async () => {

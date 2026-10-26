@@ -45,6 +45,8 @@ export function Toggle({
         onClick={() => onChange(!checked)}
         className={cn(
           'relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
+          // A larger invisible hit area (60 × 40) around the small switch.
+          'before:absolute before:-inset-2',
           'disabled:opacity-50',
           checked ? 'bg-accent' : 'bg-surface-3 ring-1 ring-line ring-inset',
         )}

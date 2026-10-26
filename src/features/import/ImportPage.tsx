@@ -12,9 +12,13 @@ import { isReviewable, reviewPath } from '@/features/games/gameList';
 import { cn } from '@/lib/cn';
 import { recordFromPgn, savePgnGame } from '@/sources/pgnImport';
 import {
+  CHESSCOM_LINK_MESSAGE,
   MAX_LISTED_GAMES,
   MAX_PGN_FILE_BYTES,
+  NO_GAMES_MESSAGE,
   OPERA_GAME_PGN,
+  notPgnMessage,
+  parseGameLink,
   summarizePgnHeaders,
   type PgnSummary,
 } from './importHelpers';
@@ -44,7 +48,8 @@ export default function ImportPage() {
     try {
       record = recordFromPgn(pgn);
     } catch (err) {
-      setError(errorMessage(err));
+      const message = errorMessage(err);
+      setError(notPgnMessage(pgn, message) ?? message);
       setBusy(false);
       return;
     }
@@ -69,6 +74,15 @@ export default function ImportPage() {
       setError('Paste a PGN or choose a .pgn file first.');
       return;
     }
+    const link = parseGameLink(input);
+    if (link?.site === 'lichess') {
+      navigate(reviewPath(`lichess/${link.gameId}`));
+      return;
+    }
+    if (link?.site === 'chesscom') {
+      setError(CHESSCOM_LINK_MESSAGE);
+      return;
+    }
     let games: string[];
     try {
       games = splitPgnGames(input);
@@ -77,9 +91,7 @@ export default function ImportPage() {
       return;
     }
     if (games.length === 0) {
-      setError(
-        'No games found. A PGN has moves like “1. e4 e5 2. Nf3”, usually after tags like [White "…"].',
-      );
+      setError(NO_GAMES_MESSAGE);
       return;
     }
     if (games.length === 1) {
@@ -147,7 +159,8 @@ export default function ImportPage() {
       <header>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Import a PGN</h1>
         <p className="mt-1.5 text-muted">
-          Paste a game in PGN format, or open a .pgn file. Everything stays on your device.
+          Paste a game in PGN format or a Lichess game link, or open a .pgn file. Everything stays
+          on your device.
         </p>
       </header>
 
@@ -172,6 +185,7 @@ export default function ImportPage() {
             <Button
               size="sm"
               variant="ghost"
+              className="h-10 sm:h-8"
               onClick={() => {
                 setText(OPERA_GAME_PGN);
                 setError(null);
