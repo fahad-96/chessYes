@@ -7,6 +7,8 @@ import { Layout } from './Layout';
 const HomePage = lazy(() => import('@/features/home/HomePage'));
 const GamesPage = lazy(() => import('@/features/games/GamesPage'));
 const ReviewPage = lazy(() => import('@/features/review/ReviewPage'));
+const InsightsPage = lazy(() => import('@/features/insights/InsightsPage'));
+const PuzzlesPage = lazy(() => import('@/features/puzzles/PuzzlesPage'));
 const ImportPage = lazy(() => import('@/features/import/ImportPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const AboutPage = lazy(() => import('@/features/about/AboutPage'));
@@ -33,6 +35,10 @@ const router = createHashRouter([
       { path: '/player/:platform/:username', element: page(<GamesPage />) },
       /** Review: /review/<GameRecord.id>, e.g. /review/lichess/HqjDTU4A */
       { path: '/review/*', element: page(<ReviewPage />) },
+      /** Insights across many games: /insights/chesscom/hikaru */
+      { path: '/insights/:platform/:username', element: page(<InsightsPage />) },
+      /** Puzzles built from your own mistakes. */
+      { path: '/puzzles', element: page(<PuzzlesPage />) },
       { path: '/import', element: page(<ImportPage />) },
       { path: '/settings', element: page(<SettingsPage />) },
       { path: '/about', element: page(<AboutPage />) },

@@ -99,3 +99,54 @@
 .kb-board .cg-wrap coords.files.black coord:nth-child(even) {
   color: var(--board-light);
 }
+
+/* Promotion picker: covers the board until a piece is chosen. */
+.kb-promotion {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgb(0 0 0 / 0.55);
+}
+
+.kb-promotion-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+
+.kb-promotion-choice {
+  position: relative;
+  width: clamp(44px, 16cqi, 88px);
+  aspect-ratio: 1 / 1;
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.kb-promotion-choice:hover,
+.kb-promotion-choice:focus-visible {
+  background: var(--surface-3);
+}
+
+.kb-promotion .kb-promotion-choice piece {
+  position: absolute;
+  inset: 6%;
+  width: 88%;
+  height: 88%;
+}
+
+.kb-promotion-cancel {
+  min-height: 40px;
+  padding: 0 1rem;
+  border-radius: 0.5rem;
+  color: #fff;
+  font-size: 0.875rem;
+}
