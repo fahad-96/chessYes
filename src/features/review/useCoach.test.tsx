@@ -8,6 +8,8 @@ import {
   type GameReview,
   type MoveReview,
 } from '@/core/types';
+import type { CoachScript } from '@/voice/coachScript';
+import { narrationAt } from './coach';
 import { useCoach, type CoachOptions } from './useCoach';
 import type { Variation } from './variation';
 
@@ -17,12 +19,19 @@ const voice = vi.hoisted(() => ({
   spoken: [] as string[],
   finish: [] as (() => void)[],
   stops: 0,
+  prefetched: [] as string[][],
 }));
 
 vi.mock('@/voice/voice', () => ({
+  armVoice: () => undefined,
   isVoiceSupported: () => true,
-  speak: (text: string) => {
-    voice.spoken.push(text);
+  prefetchSpeech: (lines: CoachScript[]) => {
+    voice.prefetched.push(lines.map((line) => line.text));
+  },
+  prepareVoice: () => undefined,
+  releaseVoice: () => undefined,
+  speak: (speech: CoachScript | string) => {
+    voice.spoken.push(typeof speech === 'string' ? speech : speech.text);
     return new Promise<void>((resolve) => voice.finish.push(resolve));
   },
   stopSpeaking: () => {
@@ -96,13 +105,16 @@ async function flush() {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  Object.assign(voice, { narrate: false, spoken: [], finish: [], stops: 0 });
+  Object.assign(voice, { narrate: false, spoken: [], finish: [], stops: 0, prefetched: [] });
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
+
+/** What the coach says at a ply of the test game. */
+const line = (ply: number) => narrationAt(game, review, ply).text;
 
 describe('useCoach', () => {
   it('reads each move while narration is on, and nothing while it is off', () => {
@@ -111,19 +123,22 @@ describe('useCoach', () => {
     expect(voice.spoken).toEqual([]);
     voice.narrate = true;
     rerender({ ...props, ply: 2 });
-    expect(voice.spoken).toEqual(['E5 is the best move.']);
+    expect(voice.spoken).toEqual([line(2)]);
     rerender({ ...props, ply: 3 });
-    expect(voice.spoken.at(-1)).toBe('Knight f3 is the best move.');
+    expect(voice.spoken.at(-1)).toBe(line(3));
+    expect(line(3)).toMatch(/^Knight to f3./);
+    // The next lines are fetched while this one is said.
+    expect(voice.prefetched.at(-1)).toEqual([line(4), line(5), line(6)]);
   });
 
   it('says something right away when narration is switched on', () => {
     const { result } = setup({ ply: 3 });
     act(() => result.current.setNarrate(true));
     expect(voice.narrate).toBe(true);
-    expect(voice.spoken).toEqual(['Knight f3 is the best move.']);
+    expect(voice.spoken).toEqual([line(3)]);
   });
 
-  it('reads a story when it opens and stops when it closes', () => {
+  it('says the line of the move whose story opens, and stops when it closes', () => {
     voice.narrate = true;
     const { rerender, props } = setup({ ply: 4 });
     const story: Variation = {
@@ -151,7 +166,7 @@ describe('useCoach', () => {
       },
     };
     rerender({ ...props, ply: 4, variation: story });
-    expect(voice.spoken).toEqual(['Your opponent replies Bishop b5.']);
+    expect(voice.spoken).toEqual([line(4)]);
     const stops = voice.stops;
     rerender({ ...props, ply: 4, variation: null });
     expect(voice.stops).toBeGreaterThan(stops);
@@ -163,7 +178,7 @@ describe('useCoach', () => {
     expect(showMoment).toHaveBeenCalledWith(2);
     rerender({ ...props, ply: 2 });
     expect(result.current.tour).toMatchObject({ index: 0, total: 2, ply: 2, label: '1... e5' });
-    expect(voice.spoken).toEqual(['E5 is the best move.']);
+    expect(voice.spoken).toEqual([line(2)]);
     // The narration ends; after the pause the next moment is shown.
     act(() => voice.finish.shift()?.());
     await flush();
@@ -171,7 +186,7 @@ describe('useCoach', () => {
     expect(showMoment).toHaveBeenLastCalledWith(5);
     rerender({ ...props, ply: 5 });
     expect(result.current.tour).toMatchObject({ index: 1, ply: 5 });
-    expect(voice.spoken.at(-1)).toBe('Bishop b5 is the best move.');
+    expect(voice.spoken.at(-1)).toBe(line(5));
     act(() => voice.finish.shift()?.());
     await flush();
     act(() => vi.advanceTimersByTime(5000));

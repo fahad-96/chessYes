@@ -36,6 +36,7 @@ import { StoryPanel } from './StoryPanel';
 import { SummaryCard } from './SummaryCard';
 import { VariationPanel } from './VariationPanel';
 import { VoiceToggle } from './VoiceToggle';
+import { narrationAt, storyMovePly } from './coach';
 import { useReviewKeyboard } from './keyboard';
 import { isRetryable, retryablePlies } from './retry';
 import {
@@ -451,6 +452,12 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
   const hasArrow = useMemo(() => arrowsForMove(moveReview, true).length > 0, [moveReview]);
 
   const frame = useMemo(() => (shownStory ? storyFrame(shownStory) : null), [shownStory]);
+  // "Listen" in the story panel says the coach line of the move the story is about.
+  const storyPly = storyMovePly(shownStory);
+  const storyScript = useMemo(
+    () => (storyPly === null ? null : narrationAt(game, review, storyPly)),
+    [game, review, storyPly],
+  );
 
   const view = useMemo<BoardView>(() => {
     if (retryItem) return retryBoardView(retryItem, game);
@@ -774,6 +781,7 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
         shownStory.story.classification,
         shownStory.moves[0]?.san,
       )}
+      script={storyScript}
       playing={variationControls.playing}
       onSeek={seekVariation}
       onStep={stepVariation}

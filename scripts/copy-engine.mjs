@@ -39,16 +39,3 @@ writeFileSync(
   ) + '\n',
 );
 console.log(`[copy-engine] ${FLAVOR} (stockfish.js ${version}) -> public/engine`);
-
-// The ONNX runtime used by the optional natural voice (Kokoro via Transformers.js).
-// Served from our own site so only the model weights come from the Hugging Face Hub,
-// and only when a user turns the natural voice on.
-const ortDir = join(root, 'node_modules', '@huggingface', 'transformers', 'dist');
-if (existsSync(ortDir)) {
-  const voiceDir = join(root, 'public', 'voice');
-  mkdirSync(voiceDir, { recursive: true });
-  for (const file of ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm']) {
-    copyFileSync(join(ortDir, file), join(voiceDir, file));
-  }
-  console.log('[copy-engine] ONNX runtime -> public/voice');
-}

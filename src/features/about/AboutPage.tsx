@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { LogoMark } from '@/components/ui/Logo';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
-import { CLASSIFICATION_DOC_URL, REPO_URL } from './links';
+import { CLASSIFICATION_DOC_URL, REPO_URL, VOICE_REPO_URL } from './links';
 
 interface Credit {
   name: string;
@@ -56,40 +56,16 @@ const CREDITS: Credit[] = [
     note: 'Piece set by Colin M.L. Burnett.',
   },
   {
+    name: 'Chess Yes voice pack',
+    href: VOICE_REPO_URL,
+    license: 'CC-BY-4.0',
+    note: 'The coach voice (Bella): Chess Yes voice pack by Fahad Yousuf, generated with Kokoro-82M. Short recorded clips that this site serves and stitches into sentences.',
+  },
+  {
     name: 'Kokoro-82M',
     href: 'https://huggingface.co/hexgrad/Kokoro-82M',
     license: 'Apache-2.0',
-    note: 'The optional natural voice, by hexgrad. Its weights are downloaded from the Hugging Face Hub only if you turn it on in Settings.',
-  },
-  {
-    name: 'kokoro-js',
-    href: 'https://github.com/hexgrad/kokoro',
-    license: 'Apache-2.0',
-    note: 'Runs Kokoro in the browser.',
-  },
-  {
-    name: 'Transformers.js',
-    href: 'https://github.com/huggingface/transformers.js',
-    license: 'Apache-2.0',
-    note: 'Machine-learning models in the browser, by Hugging Face.',
-  },
-  {
-    name: 'ONNX Runtime Web',
-    href: 'https://github.com/microsoft/onnxruntime',
-    license: 'MIT',
-    note: 'Runs the voice model on your GPU, by Microsoft.',
-  },
-  {
-    name: 'phonemizer.js',
-    href: 'https://github.com/xenova/phonemizer.js',
-    license: 'Apache-2.0',
-    note: 'Turns text into speech sounds for the natural voice, by Xenova.',
-  },
-  {
-    name: 'eSpeak NG',
-    href: 'https://github.com/espeak-ng/espeak-ng',
-    license: 'GPL-3.0-or-later',
-    note: 'The pronunciation rules inside phonemizer.js, compiled to WebAssembly.',
+    note: 'The open speech model by hexgrad that the voice pack was generated with, once, ahead of time. No speech model runs on your device.',
   },
   {
     name: 'React',

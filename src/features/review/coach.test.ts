@@ -6,7 +6,18 @@ import {
   type GameReview,
   type MoveReview,
 } from '@/core/types';
-import { moveLabelAt, narrationAt, tourPlies } from './coach';
+import { CLIPS } from '@/voice/vocabulary';
+import { coachScript, coachSummary } from '@/voice/coachScript';
+import {
+  introduction,
+  moveLabelAt,
+  narrationAt,
+  storyMovePly,
+  storyNarration,
+  tourPlies,
+  upcomingLines,
+} from './coach';
+import type { Variation } from './variation';
 
 const game = parsePgn('1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *');
 
@@ -84,65 +95,59 @@ describe('narrationAt', () => {
     [4],
   );
 
-  it('tells the story of a move and names the better move', () => {
-    expect(narrationAt(game, reviewed, 4)).toBe(
-      'Knight c6 is a blunder. Your opponent replies Bishop b5 and pins your knight. Best was d6.',
-    );
+  it('says the coach line of a reviewed move, with its words as text', () => {
+    const line = narrationAt(game, reviewed, 4);
+    expect(line).toEqual(coachScript(reviewed.moves[3]!));
+    expect(line.segments[0]!.key).toBe('move:Nc6');
+    expect(line.text).toMatch(/^Knight to c6. .*blunder/);
+    expect(line.segments.every((s) => CLIPS.has(s.key))).toBe(true);
   });
 
-  it('tells the explanation when it already holds the story or the story shows nothing', () => {
-    const story = reviewed.moves[3]!.why!;
-    const told = review(
-      [
-        ...reviewed.moves.slice(0, 3),
-        {
-          ...reviewed.moves[3]!,
-          explanation: `Blunder. ${story.text} Best was d6, keeping the balance.`,
-        },
-      ],
-      [4],
-    );
-    expect(narrationAt(game, told, 4)).toBe(
-      'Knight c6 is a blunder. Your opponent replies Bishop b5 and pins your knight. Best was d6, keeping the balance.',
-    );
-    const plain = review(
-      [
-        ...reviewed.moves.slice(0, 3),
-        {
-          ...reviewed.moves[3]!,
-          why: { ...story, motifs: [], text: 'Your opponent’s best reply is Bb5.' },
-        },
-      ],
-      [4],
-    );
-    expect(narrationAt(game, plain, 4)).toBe('Knight c6 is a blunder. This hangs your knight.');
-  });
-
-  it('tells what a Miss let go rather than the opponent’s reply', () => {
-    const miss = review(
-      [
-        ...reviewed.moves.slice(0, 3),
-        {
-          ...reviewed.moves[3]!,
-          classification: 'missedWin',
-          explanation: 'Miss. You had mate in 6, starting with d6.',
-        },
-      ],
-      [4],
-    );
-    expect(narrationAt(game, miss, 4)).toBe(
-      'Knight c6 is a miss. You had mate in 6, starting with d6.',
-    );
-  });
-
-  it('falls back to the explanation, then to the move alone', () => {
-    expect(narrationAt(game, reviewed, 1)).toBe('E4 is a book move. King’s Pawn Opening.');
-    expect(narrationAt(game, reviewed, 5)).toBe('Bishop b5.');
-    expect(narrationAt(game, null, 2)).toBe('E5.');
+  it('says just the move while it is not analysed', () => {
+    expect(narrationAt(game, reviewed, 5)).toEqual({
+      segments: [{ key: 'move:Bb5' }],
+      text: 'Bishop to b5.',
+    });
+    expect(narrationAt(game, null, 2).text).toBe('e5.');
   });
 
   it('says nothing at the start', () => {
-    expect(narrationAt(game, reviewed, 0)).toBe('');
+    expect(narrationAt(game, reviewed, 0)).toEqual({ segments: [], text: '' });
+  });
+
+  it('opens with the accuracies once the game is reviewed', () => {
+    expect(introduction(reviewed)).toEqual(coachSummary(reviewed));
+    expect(typeof introduction(null)).toBe('string');
+  });
+
+  it('finds the move a story is about, and its line', () => {
+    const story = reviewed.moves[3]!.why!;
+    const after: Variation = {
+      kind: 'story',
+      startPly: 4,
+      startFen: story.fen,
+      moves: [],
+      index: 0,
+      story: {
+        story,
+        player: 'b',
+        mover: 'b',
+        afterMove: true,
+        anchorLabel: '2... Nc6',
+        san: 'Nc6',
+        classification: 'blunder',
+      },
+    };
+    expect(storyMovePly(after)).toBe(4);
+    expect(
+      storyMovePly({ ...after, startPly: 3, story: { ...after.story!, afterMove: false } }),
+    ).toBe(4);
+    expect(storyMovePly(null)).toBeNull();
+    expect(storyNarration(game, reviewed, after)).toEqual(narrationAt(game, reviewed, 4));
+    expect(upcomingLines(game, reviewed, [5, 6, 13]).map((l) => l.segments[0]!.key)).toEqual([
+      'move:Bb5',
+      'sq:a6',
+    ]);
   });
 
   it('labels moves and lists the key moments that can be told', () => {

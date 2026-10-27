@@ -9,7 +9,7 @@ You need Node.js 20 or newer.
 ```bash
 git clone https://github.com/fahad-96/kibitz-chess.git
 cd kibitz-chess
-npm install        # also copies Stockfish into public/engine and the voice runtime into public/voice
+npm install        # also copies Stockfish into public/engine and installs the voice pack into public/voice-pack
 npm run dev        # http://localhost:5173
 ```
 
@@ -44,7 +44,7 @@ src/
   engine/      Stockfish (WASM) in a Web Worker, analysis passes, IndexedDB cache
   library/     Reviewed games, kept compact in IndexedDB for insights and puzzles
   practice/    Checking a move you try against the engine, hints, lines in SAN
-  voice/       Speech: SAN to words, system voices, the optional Kokoro natural voice
+  voice/       The voice coach: coach lines, the voice pack player, the device voice
   sources/     Chess.com and Lichess clients, pasted PGN storage
   components/  Board, eval bar, eval graph, move list, classification icons
   features/    Screens
@@ -68,8 +68,19 @@ Rules of thumb:
 - **Precision before recall in tactics.** A wrong "fork" is worse than none: `tactics.ts` only reports a motif that pays off in the engine's line.
 - **Network access goes through `src/sources/http.ts`.** Chess.com rejects parallel requests, so requests are queued per host.
 - **The engine runs on the user's device.** Don't add server-side analysis; keeping the project free to run is a core goal. There is one shared engine: background work (the insights batch) pauses while the review screen analyses.
-- **Keep the install small.** The service worker precaches the app shell, the hashed assets and Stockfish. Anything big and optional (the natural voice) is fetched only when a user turns it on: see `ON_DEMAND_ASSET` in `vite.config.ts` and the header of `public/sw.js`.
-- **Text that is spoken goes through `src/voice/speakable.ts`**, which turns SAN into words ("Nxe5+" → "Knight takes e5 check").
+- **Keep the install small.** The service worker precaches the app shell, the hashed assets and Stockfish. The voice pack is never precached: clips are cached as they are played (see the header of `public/sw.js`).
+- **What the coach says is built from voice clips.** A review line is a `CoachScript` from `src/voice/coachScript.ts`, made only of clips in `src/voice/vocabulary.ts`. Other spoken text goes through `src/voice/speakable.ts` (SAN to words) and is read by the device voice.
+
+## Changing what the coach says
+
+The coach voice is pre-rendered, so a new sentence needs new clips:
+
+1. Edit `src/voice/vocabulary.ts` (and `coachScript.ts` to use the new clips). Changing a clip's key or text, or adding clips, means bumping `VOCABULARY_VERSION`. `vocabulary.test.ts` and `coachScript.test.ts` check that every line uses known clips.
+2. Regenerate the clip list in the voice repository: `npm run voice:clips -- ../chess-yes-voice/clips.json`.
+3. In [chess-yes-voice](https://github.com/fahad-96/chess-yes-voice), render (`node render.mjs --jobs 3`; only new or changed clips are rendered) and pack (`node pack.mjs`), then publish `dist/chess-yes-voice-af_bella-v<version>.tar.gz` and its `.sha256` as release `v<version>` (see its README).
+4. Bump `voice-pack.json` here: `version`, the release `url` and the `sha256` from the `.sha256` file. The next install or build downloads the new pack.
+
+Until the new pack is published, lines that need a missing clip are spoken by the device voice, so the app keeps working. To try a local render first, run `VOICE_PACK_DIR=../chess-yes-voice/pack npm run voice:fetch`.
 
 ## Reporting a wrong classification
 

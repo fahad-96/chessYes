@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Square, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import type { CoachScript } from '@/voice/coachScript';
 import { textToSpeech } from '@/voice/speakable';
 import {
   isVoiceSupported,
@@ -20,24 +21,31 @@ export function speechFor(text: string): string {
 
 export interface ListenButtonProps {
   text: string;
+  /**
+   * The coach line to say instead of `text` (the coach voice says it; the device voice reads
+   * its text). Without one, `text` is read by the device voice.
+   */
+  script?: CoachScript | null;
   /** Speak as soon as the button appears, when the "read aloud" setting is on. */
   autoPlay?: boolean;
   className?: string;
 }
 
 /**
- * Reads `text` aloud with the voice coach (the engine chosen in Settings), or stops it.
+ * Reads `script` (or `text`) aloud with the voice coach, or stops it.
  * Renders nothing in browsers without speech. Speech this button started stops when it
  * goes away (e.g. on the next puzzle).
  */
-export function ListenButton({ text, autoPlay = false, className }: ListenButtonProps) {
+export function ListenButton({ text, script, autoPlay = false, className }: ListenButtonProps) {
   const speaking = useVoiceStatus((s) => s.speaking);
   const started = useRef(false);
   const supported = isVoiceSupported();
 
+  const speech = () =>
+    script && (script.segments.length || script.text) ? script : speechFor(text);
   const play = () => {
     started.current = true;
-    void speak(speechFor(text)).catch(() => undefined);
+    void speak(speech()).catch(() => undefined);
   };
 
   useEffect(() => {

@@ -25,16 +25,16 @@
     "format:check": "prettier --check .",
     "openings": "node scripts/build-openings.mjs",
     "engine": "node scripts/copy-engine.mjs",
-    "postinstall": "node scripts/copy-engine.mjs",
-    "predev": "node scripts/copy-engine.mjs",
-    "prebuild": "node scripts/copy-engine.mjs"
+    "voice:clips": "node scripts/voice-clips.mjs",
+    "voice:fetch": "node scripts/fetch-voice.mjs",
+    "postinstall": "node scripts/copy-engine.mjs && node scripts/fetch-voice.mjs",
+    "predev": "node scripts/copy-engine.mjs && node scripts/fetch-voice.mjs",
+    "prebuild": "node scripts/copy-engine.mjs && node scripts/fetch-voice.mjs"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
     "chess.js": "^1.4.0",
     "chessground": "^9.2.1",
     "idb-keyval": "^6.3.0",
-    "kokoro-js": "^1.2.1",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

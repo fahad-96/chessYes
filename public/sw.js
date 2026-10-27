@@ -10,9 +10,9 @@
  *   - BUILD_ID: a hash of the build output. A deploy that changes anything produces a
  *     byte-different sw.js (which is how browsers notice an update) and new cache names,
  *     while rebuilding identical code keeps the id, so users see no pointless update prompt.
- *   - PRECACHE: the files downloaded at install, grouped by how they are cached. The optional
- *     natural voice (its model worker in assets/, the ONNX runtime in voice/) is left out: it
- *     is fetched, and cached at runtime, only once a user turns that voice on.
+ *   - PRECACHE: the files downloaded at install, grouped by how they are cached. The coach
+ *     voice pack (voice-pack/, ~20 MB of clips) is never precached: each clip is cached the
+ *     first time it is played.
  *
  * Caching rules. Only GET requests inside this app's scope are handled. Cross-origin
  * requests (the Chess.com and Lichess APIs) always go straight to the network: the app
@@ -23,6 +23,11 @@
  *   - engine/* (Stockfish js + wasm, ~1.9 MB): cache first with background revalidation.
  *     The names do not change between deploys, so they live in a cache that is not tied
  *     to the build id and are not downloaded again after every deploy.
+ *   - voice-pack/*.mp3 (the coach voice's clips, ~7 kB each): cache first, in a cache of their
+ *     own that survives deploys and keeps the most recent VOICE_MAX_ENTRIES clips. The file
+ *     names contain a hash, so a cached clip is never stale.
+ *   - voice-pack/manifest.json: network first (it names the clips of the current pack), with
+ *     the cached copy after MANIFEST_TIMEOUT_MS or offline.
  *   - Other precached files (manifest, icons): served from the precache.
  *   - Anything else: network first, with a small capped runtime cache as the fallback.
  *
@@ -41,10 +46,18 @@ const PRECACHE_CACHE = `${CACHE_PREFIX}precache-${BUILD_ID}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${BUILD_ID}`;
 /** Bump the version only if the format of the stored engine responses changes. */
 const ENGINE_CACHE = `${CACHE_PREFIX}engine-v1`;
+/** The coach voice's clips and manifest; not tied to a build either. */
+const VOICE_CACHE = `${CACHE_PREFIX}voice-v1`;
 
 /** Vite's build.assetsDir: hashed, immutable files. */
 const ASSETS_PREFIX = 'assets/';
 const ENGINE_PREFIX = 'engine/';
+const VOICE_PREFIX = 'voice-pack/';
+const VOICE_MANIFEST = 'voice-pack/manifest.json';
+/** About 5 MB of clips: a few reviews' worth of lines, small enough for any phone. */
+const VOICE_MAX_ENTRIES = 700;
+/** A slow network should not hold up the first line: use the cached manifest after this. */
+const MANIFEST_TIMEOUT_MS = 3000;
 /** The runtime cache only backs up stray same-origin files, so it stays small. */
 const RUNTIME_MAX_ENTRIES = 60;
 /** On a connection that is up but barely working, start from the cached app after this. */
@@ -64,7 +77,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keep = new Set([PRECACHE_CACHE, RUNTIME_CACHE, ENGINE_CACHE]);
+      const keep = new Set([PRECACHE_CACHE, RUNTIME_CACHE, ENGINE_CACHE, VOICE_CACHE]);
       const names = await caches.keys();
       await Promise.all(
         names
@@ -72,6 +85,7 @@ self.addEventListener('activate', (event) => {
           .map((name) => caches.delete(name)),
       );
       await pruneEngineCache();
+      await trimCache(VOICE_CACHE, VOICE_MAX_ENTRIES);
       // Lets the navigation request start while this worker boots (network-first pages).
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
       // Control the page that installed us, so the first visit already works offline.
@@ -99,6 +113,10 @@ self.addEventListener('fetch', (event) => {
   const path = url.href.slice(SCOPE.length);
   if (path.startsWith(ENGINE_PREFIX)) {
     event.respondWith(handleEngineFile(event));
+  } else if (path === VOICE_MANIFEST) {
+    event.respondWith(handleVoiceManifest(event, url.href));
+  } else if (path.startsWith(VOICE_PREFIX) && path.endsWith('.mp3')) {
+    event.respondWith(handleVoiceClip(event, url.href));
   } else if (path.startsWith(ASSETS_PREFIX) || SHELL_URLS.has(url.href)) {
     event.respondWith(cacheFirst(event));
   } else {
@@ -207,6 +225,48 @@ async function networkFirst(event) {
   }
 }
 
+/** Clips are immutable (hashed names): the cached copy always wins. */
+async function handleVoiceClip(event, key) {
+  const cached = await lookUp(key, VOICE_CACHE);
+  if (cached) return cached;
+  const response = await fetch(event.request);
+  // Only audio: a server that answers a missing file with its index page must not poison it.
+  const audio = (response.headers.get('content-type') ?? '').startsWith('audio/');
+  if (isCacheable(response) && audio) event.waitUntil(putVoiceClip(key, response.clone()));
+  return response;
+}
+
+let voicePuts = 0;
+
+async function putVoiceClip(key, response) {
+  const cache = await caches.open(VOICE_CACHE);
+  await cache.put(key, response);
+  // Trimming lists the whole cache, so do it every few clips rather than every one.
+  if (++voicePuts % 25 === 0) await trimCache(VOICE_CACHE, VOICE_MAX_ENTRIES);
+}
+
+/** The manifest names the current pack's files: ask the network first, briefly. */
+async function handleVoiceManifest(event, key) {
+  const network = fetch(event.request).then(async (response) => {
+    if (isCacheable(response)) {
+      // A full or blocked cache must not turn a good response into an error.
+      await caches
+        .open(VOICE_CACHE)
+        .then((cache) => cache.put(key, response.clone()))
+        .catch(noop);
+    }
+    return response;
+  });
+  event.waitUntil(network.then(noop, noop));
+  try {
+    return await withTimeout(network, MANIFEST_TIMEOUT_MS);
+  } catch {
+    const cached = await lookUp(key, VOICE_CACHE);
+    // Nothing cached yet: keep waiting for the network (or fail like a normal request).
+    return cached ?? network;
+  }
+}
+
 /** Engine files already revalidated by this worker instance (it lives for minutes at most). */
 const revalidated = new Set();
 
@@ -277,11 +337,21 @@ async function matchOwnCaches(request) {
 async function putInRuntimeCache(request, response) {
   const cache = await caches.open(RUNTIME_CACHE);
   await cache.put(request, response);
-  // Keys come back oldest first, so trimming the front keeps the most recent entries.
-  const keys = await cache.keys();
-  const excess = keys.length - RUNTIME_MAX_ENTRIES;
+  await trimCache(RUNTIME_CACHE, RUNTIME_MAX_ENTRIES);
+}
+
+/**
+ * Keeps the newest `max` entries of a cache: keys come back oldest first, so trimming the
+ * front keeps the most recent ones. The voice manifest is never trimmed.
+ */
+async function trimCache(cacheName, max) {
+  const cache = await caches.open(cacheName);
+  const keys = (await cache.keys()).filter((request) => !request.url.endsWith(VOICE_MANIFEST));
+  const excess = keys.length - max;
   if (excess > 0) await Promise.all(keys.slice(0, excess).map((key) => cache.delete(key)));
 }
+
+function noop() {}
 
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {

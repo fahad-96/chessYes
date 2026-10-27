@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Check, Download, Square, Trash2, Volume2 } from 'lucide-react';
+import { Check, Info, Square, Trash2, Volume2 } from 'lucide-react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
@@ -18,24 +18,24 @@ import {
   type SettingsState,
   type ThemeSetting,
 } from '@/state/settings';
+import { coachSampleLine } from '@/voice/sample';
 import {
-  KOKORO_DOWNLOAD_MB,
-  KOKORO_VOICES,
-  hasWebGpuAdapter,
-  isKokoroDownloaded,
-  type KokoroVoiceId,
-} from '@/voice/kokoroVoice';
-import { listSystemVoices, rankEnglishVoices, systemVoiceLabel } from '@/voice/systemVoice';
+  isSystemVoiceSupported,
+  listSystemVoices,
+  rankEnglishVoices,
+  systemVoiceLabel,
+} from '@/voice/systemVoice';
 import {
   MAX_RATE,
   MIN_RATE,
+  checkCoachVoice,
   isVoiceSupported,
-  prepareNaturalVoice,
-  removeNaturalVoice,
+  prepareVoice,
   speak,
   stopSpeaking,
   useVoiceSettings,
   useVoiceStatus,
+  type VoiceEngineId,
 } from '@/voice/voice';
 import { formatBytes } from './formatBytes';
 
@@ -379,13 +379,13 @@ function ReviewSection() {
   );
 }
 
-const TEST_SENTENCE =
-  'Rook g8 is a blunder. Your opponent replies bishop takes g8 and wins your rook for free.';
-
-/** English system voices, best first; null while loading, empty when the system has none. */
+/** English device voices, best first; null while loading, empty when the system has none. */
 function useEnglishVoices(): SpeechSynthesisVoice[] | null {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[] | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[] | null>(() =>
+    isSystemVoiceSupported() ? null : [],
+  );
   useEffect(() => {
+    if (!isSystemVoiceSupported()) return;
     let cancelled = false;
     const load = () =>
       void listSystemVoices().then((all) => {
@@ -393,29 +393,42 @@ function useEnglishVoices(): SpeechSynthesisVoice[] | null {
       });
     load();
     // Some browsers add voices later (online voices, newly installed ones).
-    const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
-    synth?.addEventListener?.('voiceschanged', load);
+    const synth = window.speechSynthesis;
+    synth.addEventListener?.('voiceschanged', load);
     return () => {
       cancelled = true;
-      synth?.removeEventListener?.('voiceschanged', load);
+      synth.removeEventListener?.('voiceschanged', load);
     };
   }, []);
   return voices;
 }
 
-/** Whether the natural voice can be offered here (WebGPU with a real adapter). */
-function useNaturalVoiceAvailable(): boolean {
-  const [available, setAvailable] = useState(false);
+/** One line under the voice choice: is the coach voice here, or is the device voice used. */
+function CoachVoiceStatus({ engine }: { engine: VoiceEngineId }) {
+  const pack = useVoiceStatus((s) => s.pack);
   useEffect(() => {
-    let cancelled = false;
-    void hasWebGpuAdapter().then((ok) => {
-      if (!cancelled) setAvailable(ok);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return available;
+    if (engine === 'coach') void checkCoachVoice();
+  }, [engine]);
+  if (engine !== 'coach') return null;
+  return (
+    <p className="flex min-h-6 items-start gap-2 text-sm text-muted" role="status">
+      {pack === 'checking' || pack === 'unknown' ? (
+        <>
+          <Spinner label="Checking" /> Checking the coach voice…
+        </>
+      ) : pack === 'ready' ? (
+        <>
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+          Coach voice ready.
+        </>
+      ) : (
+        <>
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          The coach voice is not available here, so the device voice is used.
+        </>
+      )}
+    </p>
+  );
 }
 
 function VoiceSection() {
@@ -423,24 +436,23 @@ function VoiceSection() {
   const narrate = useVoiceSettings((s) => s.narrate);
   const engine = useVoiceSettings((s) => s.engine);
   const systemVoice = useVoiceSettings((s) => s.systemVoice);
-  const kokoroVoice = useVoiceSettings((s) => s.kokoroVoice);
   const rate = useVoiceSettings((s) => s.rate);
   const set = useVoiceSettings((s) => s.set);
   const speaking = useVoiceStatus((s) => s.speaking);
   const voices = useEnglishVoices();
-  const naturalAvailable = useNaturalVoiceAvailable();
+  const deviceVoice = isSystemVoiceSupported();
   const voiceId = useId();
   const rateId = useId();
 
-  // Stop the test sentence when leaving the page.
+  // Stop the test line when leaving the page.
   useEffect(() => () => stopSpeaking(), []);
 
   if (!supported) {
     return (
       <Section title="Voice">
         <p className="text-sm text-muted">
-          This browser cannot speak, so the voice coach is not available here. Everything else works
-          the same without it.
+          This browser cannot play speech, so the voice coach is not available here. Everything else
+          works the same without it.
         </p>
       </Section>
     );
@@ -449,49 +461,55 @@ function VoiceSection() {
   return (
     <Section
       title="Voice"
-      description="Reads moves and their stories aloud. Voices marked online are spoken by your browser maker’s service; the others never leave your device."
+      description="Hear each move’s verdict and the reason as you step through a review."
     >
       <div className="space-y-5">
         <Toggle
           checked={narrate}
           onChange={(checked) => {
             set({ narrate: checked });
-            if (!checked) stopSpeaking();
+            if (checked) prepareVoice();
+            else stopSpeaking();
           }}
           label="Read moves aloud"
           description="While you step through a review, hear each move’s verdict and why. The speaker button on the review switches this too."
         />
 
-        {naturalAvailable && (
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Voice engine</legend>
-            <div className="grid gap-2">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Voice</legend>
+          <div className="grid gap-2">
+            <RadioCard
+              name="voice-engine"
+              checked={engine === 'coach'}
+              onSelect={() => set({ engine: 'coach' })}
+              title="Coach voice (Bella)"
+              description="A natural recorded voice. Each line downloads a few kilobytes once, then also works offline."
+            />
+            {deviceVoice && (
               <RadioCard
                 name="voice-engine"
                 checked={engine === 'system'}
                 onSelect={() => set({ engine: 'system' })}
-                title="System voice"
-                description="Built into your device: instant, nothing to download."
+                title="Device voice"
+                description="Your device’s built-in speech, with a choice of voices and speeds."
               />
-              <RadioCard
-                name="voice-engine"
-                checked={engine === 'kokoro'}
-                onSelect={() => set({ engine: 'kokoro' })}
-                title="Natural voice"
-                description={`Downloads ${KOKORO_DOWNLOAD_MB} MB once, best on computers with a modern GPU.`}
-              />
-            </div>
-            {engine === 'kokoro' && (
-              <NaturalVoicePanel voice={kokoroVoice} onVoice={(id) => set({ kokoroVoice: id })} />
             )}
-          </fieldset>
-        )}
+          </div>
+          <CoachVoiceStatus engine={engine} />
+        </fieldset>
 
-        {(engine === 'system' || !naturalAvailable) && (
+        {deviceVoice && (
           <div className="space-y-2">
             <label htmlFor={voiceId} className="block text-sm font-medium">
-              System voice
+              Device voice
             </label>
+            <p className="text-sm text-muted">
+              {engine === 'coach'
+                ? 'Reads what the coach voice cannot say, such as puzzle stories. '
+                : ''}
+              Voices marked online are spoken by your browser maker’s service; the others never
+              leave your device.
+            </p>
             {voices === null ? (
               <p className="flex min-h-10 items-center gap-2 text-sm text-muted">
                 <Spinner label="Loading voices" /> Looking for voices…
@@ -521,29 +539,31 @@ function VoiceSection() {
           </div>
         )}
 
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-3 sm:max-w-md">
-            <label htmlFor={rateId} className="text-sm font-medium">
-              Speed
-            </label>
-            <span className="tabular text-sm text-muted">{formatRate(rate)}</span>
+        {deviceVoice && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-3 sm:max-w-md">
+              <label htmlFor={rateId} className="text-sm font-medium">
+                Device voice speed
+              </label>
+              <span className="tabular text-sm text-muted">{formatRate(rate)}</span>
+            </div>
+            <input
+              id={rateId}
+              type="range"
+              min={MIN_RATE}
+              max={MAX_RATE}
+              step={0.05}
+              value={rate}
+              aria-valuetext={formatRate(rate)}
+              onChange={(event) => set({ rate: Number(event.target.value) })}
+              className="h-10 w-full accent-[var(--accent)] sm:max-w-md"
+            />
           </div>
-          <input
-            id={rateId}
-            type="range"
-            min={MIN_RATE}
-            max={MAX_RATE}
-            step={0.05}
-            value={rate}
-            aria-valuetext={formatRate(rate)}
-            onChange={(event) => set({ rate: Number(event.target.value) })}
-            className="h-10 w-full accent-[var(--accent)] sm:max-w-md"
-          />
-        </div>
+        )}
 
         <Button
           variant="secondary"
-          onClick={() => (speaking ? stopSpeaking() : void speak(TEST_SENTENCE))}
+          onClick={() => (speaking ? stopSpeaking() : void speak(coachSampleLine()))}
         >
           {speaking ? (
             <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
@@ -560,115 +580,6 @@ function VoiceSection() {
 /** "1×", "0.85×", "1.2×". */
 function formatRate(rate: number): string {
   return `${Number(rate.toFixed(2))}×`;
-}
-
-/** Download progress, voice choice and removal for the natural voice. */
-function NaturalVoicePanel({
-  voice,
-  onVoice,
-}: {
-  voice: KokoroVoiceId;
-  onVoice: (id: KokoroVoiceId) => void;
-}) {
-  const loading = useVoiceStatus((s) => s.loading);
-  const progress = useVoiceStatus((s) => s.progress);
-  const ready = useVoiceStatus((s) => s.naturalReady);
-  const error = useVoiceStatus((s) => s.error);
-  const [downloaded, setDownloaded] = useState<boolean | null>(null);
-  const selectId = useId();
-
-  useEffect(() => {
-    let cancelled = false;
-    void isKokoroDownloaded().then((value) => {
-      if (!cancelled) setDownloaded(value);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, loading]);
-
-  const downloading = !!progress && progress.total > 0 && progress.loaded < progress.total;
-  const percent = downloading ? (progress.loaded / progress.total) * 100 : 100;
-
-  return (
-    <div className="space-y-3 rounded-xl border border-line bg-surface-2 p-3">
-      {loading ? (
-        <div className="space-y-2" aria-live="polite">
-          <p className="text-sm">
-            {downloading
-              ? `Downloading the voice… ${formatBytes(progress.loaded)} of ${formatBytes(progress.total)}`
-              : 'Preparing the voice…'}
-          </p>
-          <div
-            role="progressbar"
-            aria-label="Natural voice download"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(percent)}
-            className="h-1.5 overflow-hidden rounded-full bg-surface-3"
-          >
-            <div
-              className={cn(
-                'h-full rounded-full bg-accent transition-[width] duration-300',
-                !downloading && 'animate-pulse',
-              )}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-        </div>
-      ) : ready ? (
-        <p className="flex items-center gap-2 text-sm">
-          <Check className="h-4 w-4 text-success" aria-hidden="true" /> The natural voice is ready.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted">
-            {downloaded
-              ? 'Downloaded. It starts the first time it speaks; until then the system voice is used.'
-              : 'Not downloaded yet. Until it is, the system voice is used.'}
-          </p>
-          <Button variant="primary" className="shrink-0" onClick={() => void prepareNaturalVoice()}>
-            <Download className="h-4 w-4" aria-hidden="true" />
-            {downloaded ? 'Start voice' : `Download ${KOKORO_DOWNLOAD_MB} MB`}
-          </Button>
-        </div>
-      )}
-      {error && (
-        <p className="text-sm text-danger" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <label htmlFor={selectId} className="text-sm font-medium">
-            Voice
-          </label>
-          <select
-            id={selectId}
-            value={voice}
-            onChange={(event) => onVoice(event.target.value as KokoroVoiceId)}
-            className="h-10 min-w-0 rounded-lg border border-line bg-surface px-2 text-sm text-text hover:bg-surface-2"
-          >
-            {KOKORO_VOICES.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {(downloaded || ready) && !loading && (
-          <Button
-            variant="ghost"
-            className="shrink-0"
-            onClick={() => void removeNaturalVoice().then(() => setDownloaded(false))}
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            Remove downloaded voice
-          </Button>
-        )}
-      </div>
-    </div>
-  );
 }
 
 type ClearState = 'idle' | 'confirm' | 'clearing' | 'done' | 'error';

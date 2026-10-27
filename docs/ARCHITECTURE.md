@@ -54,7 +54,7 @@ The story flows into:
 
 - **the explanation** (`core/explain.ts`), which leads with it when it shows something concrete;
 - **the review screen**: "Show why" plays the line on the board with arrows for the motifs and a caption per move (`features/review/story.ts`, `StoryPanel.tsx`);
-- **the voice coach**, which reads the verdict and the story (`features/review/coach.ts`, `useCoach.ts`);
+- **the voice coach**, which says each move's coach line: the move, its verdict and the main reason (`features/review/coach.ts`, `useCoach.ts`);
 - **puzzles**, as "Why it works" after a puzzle is solved (`features/puzzles/story.ts`);
 - **the annotated PGN** export, as comments and a variation (`core/annotatedPgn.ts`).
 
@@ -69,30 +69,34 @@ A finished review is saved to the **library** (`library/library.ts`, IndexedDB s
 
 ## Voice
 
-`src/voice` speaks without any server:
+`src/voice` speaks without any server, and no speech model runs on the device. The default **coach voice** (Bella) is a pack of about 2,800 short MP3 clips (moves, squares, numbers and short phrases), rendered once with Kokoro-82M in the [chess-yes-voice](https://github.com/fahad-96/chess-yes-voice) repository and published there as a release archive.
 
-- `speakable.ts` turns notation into words ("Nxe5+" → "Knight takes e5 check", "1-0" → "White wins").
-- `systemVoice.ts` uses the browser's Web Speech API and ranks the installed English voices. Voices that use an online service are labelled as such in Settings.
-- `kokoroVoice.ts` and `kokoro.worker.ts` run the optional natural voice, Kokoro-82M, with Transformers.js on WebGPU in a worker. It is offered only when the browser has a GPU adapter and is opt-in: the weights (326 MB) come from the Hugging Face Hub and are cached by the browser; the ONNX runtime is served from our own site (`public/voice`, copied by `scripts/copy-engine.mjs`). A device that turns out slower than real time falls back to the system voice.
+- `vocabulary.ts` lists every clip with its stable key and the exact text the model says. `scripts/voice-clips.mjs` writes it out as the voice repository's `clips.json`.
+- `coachScript.ts` builds a move's **coach line** from the review: a list of clip keys with the pause after each, plus the same words as text (for captions and the device voice). `features/review/coach.ts` picks the line for a move, a key moment or the move whose story is shown.
+- `scripts/fetch-voice.mjs` installs the pack at build time (`npm install`, `npm run dev` and `npm run build` run it): it downloads the archive named in `voice-pack.json`, refuses it unless its sha256 matches, and unpacks it into `public/voice-pack/` (not committed). It never fails a build; without a pack the app uses the device voice. `VOICE_PACK_DIR=<folder>` installs a local render instead.
+- `packPlayer.ts` plays a line: it reads `voice-pack/manifest.json` (each clip's file and length), fetches and decodes the clips with one shared `AudioContext` and schedules them back to back. Each clip keeps 40 ms of silence at both ends, so the next one starts at the previous start + its length - 80 ms + the line's pause (`packPlan.ts`, pure and tested; the lengths come from the manifest because some decoders pad MP3s). Decoded clips stay in a small LRU cache sized for phones, and the clips of the next few lines are prefetched at low priority (none with Data Saver or on 2G). Phones only allow audio after a tap, iOS only inside the tap's own handler, so while narration is on every tap and key press unlocks the audio first; this also recovers a context that iOS interrupted or suspended in the background, and iOS is asked to play speech with the silent switch on.
+- If any clip of a line is missing from the pack or fails to load, the **whole line** is said by the device voice: one line is never spoken in two voices.
+- `systemVoice.ts` is the **device voice** (Web Speech API): the alternative in Settings, the fallback, and the reader of plain text outside the vocabulary (puzzle stories). It ranks the installed English voices; voices that use an online service are labelled as such. The speed setting applies to it only.
+- `speakable.ts` turns notation in plain text into words ("Nxe5+" → "Knight takes e5 check", "1-0" → "White wins") for the device voice.
 
 ## Offline and updates
 
-`public/sw.js` is a hand-written service worker, registered only in production builds (`app/registerServiceWorker.ts`). At build time the `kibitz:service-worker` plugin in `vite.config.ts` fills in a build id (a hash of the output) and the precache list: the app shell, every hashed asset and Stockfish (which lives in its own cache, so a deploy does not download it again). The natural voice is left out of the precache and fetched only when a user turns it on.
+`public/sw.js` is a hand-written service worker, registered only in production builds (`app/registerServiceWorker.ts`). At build time the `kibitz:service-worker` plugin in `vite.config.ts` fills in a build id (a hash of the output) and the precache list: the app shell, every hashed asset and Stockfish (which lives in its own cache, so a deploy does not download it again). The coach voice is never precached: each clip is cached the first time it is played, in a capped cache of its own that survives deploys (the names are hashed, so cache first is always right), while the pack's manifest is fetched network first.
 
 Navigations are network first with the cached app as the fallback; hashed assets are cache first. A new deploy installs in the background and the page offers to reload (`app/UpdateToast.tsx`); the old caches are removed once the new version takes over.
 
 ## Storage
 
-| Where                          | What                                                     |
-| ------------------------------ | -------------------------------------------------------- |
-| IndexedDB `kibitz-analysis`    | Raw engine analyses per game and settings (resumable)    |
-| IndexedDB `kibitz-library`     | Reviewed games, for insights and puzzles                 |
-| IndexedDB `kibitz-puzzles`     | Puzzle attempts and the practice streak                  |
-| IndexedDB `kibitz-chesscom`    | Chess.com monthly archives                               |
-| IndexedDB `kibitz-pgn`         | Pasted PGNs                                              |
-| localStorage `kibitz-settings` | Settings and recent searches                             |
-| localStorage `kibitz-voice`    | Voice settings                                           |
-| Cache Storage                  | The service worker's caches; the natural voice's weights |
+| Where                          | What                                                      |
+| ------------------------------ | --------------------------------------------------------- |
+| IndexedDB `kibitz-analysis`    | Raw engine analyses per game and settings (resumable)     |
+| IndexedDB `kibitz-library`     | Reviewed games, for insights and puzzles                  |
+| IndexedDB `kibitz-puzzles`     | Puzzle attempts and the practice streak                   |
+| IndexedDB `kibitz-chesscom`    | Chess.com monthly archives                                |
+| IndexedDB `kibitz-pgn`         | Pasted PGNs                                               |
+| localStorage `kibitz-settings` | Settings and recent searches                              |
+| localStorage `kibitz-voice`    | Voice settings                                            |
+| Cache Storage                  | The service worker's caches, including played voice clips |
 
 Everything can be cleared in Settings → Storage, or with the browser's site data.
 

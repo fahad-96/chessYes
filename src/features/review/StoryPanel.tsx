@@ -4,6 +4,7 @@ import { ListenButton } from '@/components/ListenButton';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/cn';
+import type { CoachScript } from '@/voice/coachScript';
 import { motifsAt, storyOutcome } from './story';
 import { numberedMoves, type Variation } from './variation';
 
@@ -11,6 +12,8 @@ export interface StoryPanelProps {
   /** A variation of kind 'story'. */
   variation: Variation;
   title: string;
+  /** The coach line of the move the story is about, for "Listen". */
+  script?: CoachScript | null;
   playing: boolean;
   onSeek: (index: number) => void;
   onStep: (delta: number) => void;
@@ -53,12 +56,13 @@ function IconButton({
 
 /**
  * "Show why": the story of a move played out on the board. Its moves (the step with the
- * motif is marked), the story text, play / pause / step controls, and a button that reads
- * the story aloud.
+ * motif is marked), the story text, play / pause / step controls, and a button that says
+ * the coach line of the move aloud.
  */
 export function StoryPanel({
   variation,
   title,
+  script,
   playing,
   onSeek,
   onStep,
@@ -171,8 +175,8 @@ export function StoryPanel({
           <ChevronRight aria-hidden="true" className="h-5 w-5" />
         </IconButton>
         <div className="ml-auto flex items-center gap-1">
-          {/* Reads the story aloud without turning on narration for every move. */}
-          <ListenButton text={story.text} />
+          {/* Says the move's coach line without turning on narration for every move. */}
+          <ListenButton text={story.text} script={script} />
           <span className="tabular min-w-9 text-right text-xs text-muted" aria-hidden="true">
             {variation.index} / {variation.moves.length}
           </span>

@@ -1,8 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GameReview, LineStory, ParsedGame } from '@/core/types';
-import { textToSpeech } from '@/voice/speakable';
-import { isVoiceSupported, speak, stopSpeaking, useVoiceSettings } from '@/voice/voice';
-import { TOUR_GAP_MS, TOUR_MIN_MS, moveLabelAt, narrationAt, tourPlies } from './coach';
+import type { GameReview, ParsedGame } from '@/core/types';
+import {
+  armVoice,
+  isVoiceSupported,
+  prefetchSpeech,
+  prepareVoice,
+  releaseVoice,
+  speak,
+  stopSpeaking,
+  useVoiceSettings,
+} from '@/voice/voice';
+import {
+  PREFETCH_LINES,
+  TOUR_GAP_MS,
+  TOUR_MIN_MS,
+  introduction,
+  moveLabelAt,
+  narrationAt,
+  storyNarration,
+  tourPlies,
+  upcomingLines,
+} from './coach';
 import type { Variation } from './variation';
 
 export interface TourState {
@@ -44,12 +62,19 @@ export interface CoachControls {
   nextMoment: () => void;
 }
 
+/** The plies after `ply` in the game, up to PREFETCH_LINES of them. */
+function nextPlies(game: ParsedGame, ply: number): number[] {
+  const last = Math.min(game.moves.length, ply + PREFETCH_LINES);
+  return Array.from({ length: Math.max(0, last - ply) }, (_, i) => ply + 1 + i);
+}
+
 /**
- * The voice coach on the review screen:
- * - with narration on, stepping to a move reads its verdict and story aloud (interrupting
- *   the previous one), and "Show why" reads the story while its line plays;
+ * The voice coach on the review screen, speaking coach lines (voice/coachScript.ts):
+ * - with narration on, stepping to a move says its line (interrupting the previous one), and
+ *   "Show why" says the line of the move whose story plays;
  * - "Narrate key moments" walks through the review's key moments, showing each on the
- *   board and moving on when its narration ends.
+ *   board and moving on when its line ends.
+ * While it speaks, the clips of the next lines are fetched in the background.
  */
 export function useCoach({
   game,
@@ -75,6 +100,14 @@ export function useCoach({
   // Speech never outlives the review screen.
   useEffect(() => () => stopSpeaking(), []);
 
+  // While the coach may speak, taps and key presses keep the audio unlocked (phones).
+  const touring = tour !== null;
+  useEffect(() => {
+    if (!narrate && !touring) return;
+    armVoice();
+    return () => releaseVoice();
+  }, [narrate, touring]);
+
   const goToMoment = useCallback((index: number) => {
     const { plies: list, game: g, showMoment: show } = latest.current;
     const target = list[index];
@@ -91,7 +124,10 @@ export function useCoach({
     if (latest.current.tour) stopSpeaking();
     setTour(null);
   }, []);
-  const startTour = useCallback(() => goToMoment(0), [goToMoment]);
+  const startTour = useCallback(() => {
+    prepareVoice();
+    goToMoment(0);
+  }, [goToMoment]);
   const tourIndex = tour?.index ?? null;
   const nextMoment = useCallback(() => {
     if (tourIndex !== null) goToMoment(tourIndex + 1);
@@ -104,7 +140,7 @@ export function useCoach({
     let timer: ReturnType<typeof setTimeout> | undefined;
     const startedAt = Date.now();
     const minimum = Math.max(TOUR_MIN_MS, tour.storyMs + TOUR_GAP_MS);
-    const { game: g, review: r } = latest.current;
+    const { game: g, review: r, plies: list } = latest.current;
     void speak(narrationAt(g, r, tour.ply)).then(() => {
       if (cancelled) return;
       const wait = Math.max(TOUR_GAP_MS, minimum - (Date.now() - startedAt));
@@ -113,6 +149,9 @@ export function useCoach({
         else goToMoment(tour.index + 1);
       }, wait);
     });
+    prefetchSpeech(
+      upcomingLines(g, r, list.slice(tour.index + 1, tour.index + 1 + PREFETCH_LINES)),
+    );
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -136,34 +175,38 @@ export function useCoach({
     if (!narrate || tour || busy) return;
     if (ply === 0) stopSpeaking();
     else void speak(narrationAt(game, review, ply));
+    prefetchSpeech(upcomingLines(game, review, nextPlies(game, ply)));
   }, [ply, narrate, tour, busy, game, review]);
 
-  // "Show why" reads the story while its line plays; leaving the line stops it.
-  const story: LineStory | undefined =
-    variation?.kind === 'story' ? variation.story?.story : undefined;
-  const storyRef = useRef<LineStory | undefined>(undefined);
+  // "Show why" says the line of the move whose story plays; leaving the story stops it.
+  const storyVariation = variation?.kind === 'story' && variation.story ? variation : null;
+  const story = storyVariation?.story?.story;
+  const storyRef = useRef(story);
   useEffect(() => {
     const previous = storyRef.current;
     storyRef.current = story;
     if (story === previous || !narrate || tour) return;
-    if (story) void speak(textToSpeech(story.text));
+    if (story) void speak(storyNarration(game, review, storyVariation));
     else stopSpeaking();
-  }, [story, narrate, tour]);
+  }, [story, storyVariation, narrate, tour, game, review]);
 
   const setNarrate = useCallback(
     (on: boolean) => {
       setVoice({ narrate: on });
       if (!on) {
         stopSpeaking();
+        releaseVoice();
         return;
       }
-      // Say something right away, so the user hears that it works (this is also the user
-      // gesture browsers want before they allow speech).
+      // Say something right away, so the user hears that it works (this tap is also the
+      // gesture phones want before they allow audio).
+      prepareVoice();
       const { game: g, review: r, ply: p, variation: v } = latest.current;
-      const shownStory = v?.kind === 'story' ? v.story?.story : undefined;
-      if (shownStory) void speak(textToSpeech(shownStory.text));
+      const storyLine = storyNarration(g, r, v);
+      if (storyLine.segments.length || storyLine.text) void speak(storyLine);
       else if (p > 0) void speak(narrationAt(g, r, p));
-      else void speak('I will read each move aloud as you step through the game.');
+      else void speak(introduction(r));
+      prefetchSpeech(upcomingLines(g, r, nextPlies(g, p)));
     },
     [setVoice],
   );

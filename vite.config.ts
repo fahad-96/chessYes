@@ -11,16 +11,11 @@ import { defineConfig } from 'vitest/config';
 // such as GitHub Pages (https://<user>.github.io/kibitz-chess/).
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
-  plugins: [react(), tailwindcss(), dropBundledOnnxRuntime(), serviceWorker()],
+  plugins: [react(), tailwindcss(), serviceWorker()],
   build: {
     // The opening book (~700 kB of position data, ~100 kB gzipped) is its own lazily
     // loaded chunk; everything else stays well under Vite's default 500 kB warning.
     chunkSizeWarningLimit: 800,
-  },
-  worker: {
-    // The natural-voice worker is created with { type: 'module' }, and its libraries use
-    // import.meta, which only an ES module keeps.
-    format: 'es',
   },
   resolve: {
     alias: {
@@ -29,34 +24,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     setupFiles: ['src/test/setup.ts'],
   },
 });
-
-/**
- * The natural-voice worker (src/voice/kokoro.worker.ts) always loads the ONNX runtime from
- * public/voice (wasmPaths, copied there by scripts/copy-engine.mjs). Transformers.js still
- * references its own copy of the 21 MB runtime as a fallback, so Vite would emit a second,
- * unused copy into assets/; this drops it.
- */
-function dropBundledOnnxRuntime(): Plugin {
-  return {
-    name: 'kibitz:drop-bundled-onnx-runtime',
-    apply: 'build',
-    generateBundle(_options, bundle) {
-      for (const file of Object.keys(bundle)) {
-        if (/(?:^|\/)ort-wasm[^/]*\.wasm$/.test(file)) delete bundle[file];
-      }
-    },
-  };
-}
-
-/**
- * Hashed files that are only fetched once a user turns the natural voice on (the 2 MB model
- * worker): they are cached when used, not downloaded by everyone at install.
- */
-const ON_DEMAND_ASSET = /(?:^|\/)kokoro\.worker-[^/]*\.js$/;
 
 /**
  * Finishes the service worker (public/sw.js) after a production build: replaces its
@@ -85,9 +56,9 @@ function serviceWorker(): Plugin {
       if (!existsSync(swPath)) return;
 
       const files = Object.keys(bundle).sort();
-      const assets = files.filter(
-        (file) => file.startsWith(`${assetsDir}/`) && !ON_DEMAND_ASSET.test(file),
-      );
+      const assets = files.filter((file) => file.startsWith(`${assetsDir}/`));
+      // The coach voice (public/voice-pack, ~20 MB) is never precached: the worker caches
+      // each clip the first time it is played.
       const shell = ['manifest.webmanifest', 'favicon.svg', ...publicFiles(publicDir, 'icons')];
       const engine = engineFiles(publicDir);
       const servedFiles = [...shell, ...engine].filter((file) => existsSync(join(outDir, file)));
