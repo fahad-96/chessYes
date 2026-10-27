@@ -44,6 +44,31 @@
   );
 }
 
+/*
+ * Legal moves of the selected piece (chessground marks them; we skip its brown theme, so
+ * the marks are drawn here): a dot on empty squares and a ring around capturable pieces.
+ * Translucent black reads on light and dark squares of every board theme.
+ */
+.kb-board cg-board square.selected {
+  background-color: var(--board-highlight);
+}
+
+.kb-board cg-board square.move-dest {
+  background: radial-gradient(rgb(0 0 0 / 0.2) 18%, rgb(0 0 0 / 0) 19%);
+  cursor: pointer;
+}
+
+.kb-board cg-board square.oc.move-dest {
+  background: radial-gradient(rgb(0 0 0 / 0) 72%, rgb(0 0 0 / 0.2) 73%);
+}
+
+/* Pointer devices get a tint on the square under the cursor; touch screens skip it. */
+@media (hover: hover) {
+  .kb-board cg-board square.move-dest:hover {
+    background: rgb(0 0 0 / 0.14);
+  }
+}
+
 /* Coordinates sit inside the edge squares, coloured like the opposite square. */
 .kb-board .cg-wrap coords {
   opacity: 1;
