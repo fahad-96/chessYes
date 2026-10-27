@@ -28,7 +28,7 @@ const CREDITS: Credit[] = [
     name: 'stockfish.js',
     href: 'https://github.com/nmrugg/stockfish.js',
     license: 'GPL-3.0',
-    note: 'Stockfish compiled to WebAssembly, by Nathan Rugg. Kibitz ships its single-threaded lite build unmodified.',
+    note: 'Stockfish compiled to WebAssembly, by Nathan Rugg. Chess Yes ships its single-threaded lite build unmodified.',
     licenseHref: STOCKFISH_LICENSE_URL,
   },
   {
@@ -169,22 +169,21 @@ const HOW_IT_WORKS: { icon: ReactNode; title: string; body: ReactNode }[] = [
   },
 ];
 
-/** /about: what Kibitz is, how it works, privacy, credits and licenses. */
+/** /about: what Chess Yes is, how it works, privacy, credits and licenses. */
 export default function AboutPage() {
-  useDocumentTitle('About · Kibitz');
+  useDocumentTitle('About · Chess Yes');
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="flex items-start gap-4">
         <LogoMark size={48} />
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">About Kibitz</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">About Chess Yes</h1>
           <p className="mt-2 leading-relaxed text-muted">
-            To kibitz is to comment on a game you are watching. Kibitz comments on yours: a free,
-            open-source game review for every chess player, with every move classified, accuracy for
-            both sides, an evaluation graph, and plain-English explanations that show on the board
-            why a move was brilliant or a blunder, read aloud if you like. Insights across your
-            games and puzzles from your own mistakes come with it. Game review should not sit behind
-            a paywall.
+            Chess Yes is a free, open-source game review for every chess player, with every move
+            classified, accuracy for both sides, an evaluation graph, and plain-English explanations
+            that show on the board why a move was brilliant or a blunder, read aloud if you like.
+            Insights across your games and puzzles from your own mistakes come with it. Game review
+            should not sit behind a paywall.
           </p>
         </div>
       </header>
@@ -216,7 +215,7 @@ export default function AboutPage() {
           Credits and licenses
         </h2>
         <p className="text-sm leading-relaxed text-muted">
-          Kibitz is free software under the{' '}
+          Chess Yes is free software under the{' '}
           <a
             href={`${REPO_URL}/blob/main/LICENSE`}
             target="_blank"
@@ -282,8 +281,8 @@ export default function AboutPage() {
           Disclaimer
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          Kibitz is an independent project. It is not affiliated with, endorsed by, or connected to
-          Chess.com or Lichess.
+          Chess Yes is an independent project. It is not affiliated with, endorsed by, or connected
+          to Chess.com or Lichess.
         </p>
       </section>
     </div>

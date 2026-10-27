@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Kibitz · Free chess game review",
-  "short_name": "Kibitz",
+  "name": "Chess Yes · Free chess game review",
+  "short_name": "Chess Yes",
   "description": "Free, open-source chess game review. Stockfish runs on your device.",
   "lang": "en",
   "dir": "ltr",

@@ -1,6 +1,6 @@
 /**
  * Keeps the calibrated accuracy model calibrated: on rated games from the fitting dataset
- * (src/core/__fixtures__/rated.ts), with Kibitz's own analyses, the accuracies must stay
+ * (src/core/__fixtures__/rated.ts), with Chess Yes's own analyses, the accuracies must stay
  * within the error the model was reported with on held-out games. A change to the win %
  * curve, the move curve or the averaging that moves the numbers away from the published
  * figures fails here.
@@ -33,7 +33,18 @@ interface Comparison {
   error: number;
 }
 
+const comparisons = new Map<AccuracyModel, Comparison[]>();
+
+/** Reviews of the rated games are expensive (stories included), so each model is built once. */
 function compare(model: AccuracyModel): Comparison[] {
+  const cached = comparisons.get(model);
+  if (cached) return cached;
+  const rows = buildComparisons(model);
+  comparisons.set(model, rows);
+  return rows;
+}
+
+function buildComparisons(model: AccuracyModel): Comparison[] {
   return RATED_GAMES.flatMap(({ id, game, analyses, published }) => {
     const review = buildGameReview(game, analyses, {
       book: null,
@@ -54,7 +65,8 @@ function compare(model: AccuracyModel): Comparison[] {
 const meanAbsoluteError = (rows: Comparison[]) =>
   rows.reduce((sum, row) => sum + Math.abs(row.error), 0) / rows.length;
 
-describe('the calibrated accuracy model', () => {
+// Full reviews of five games: generous when the whole suite runs in parallel.
+describe('the calibrated accuracy model', { timeout: 30_000 }, () => {
   it('is the default, and the Lichess formulas stay available', () => {
     expect(DEFAULT_ACCURACY_MODEL).toBe('calibrated');
     expect(ACCURACY_MODELS).toEqual(['calibrated', 'lichess']);

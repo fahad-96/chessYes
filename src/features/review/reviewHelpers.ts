@@ -121,7 +121,7 @@ export function variantError(variant: string): ReviewLoadError {
   return {
     kind: 'variant',
     title: 'This variant cannot be reviewed',
-    message: `Kibitz reviews standard chess only, and this game was played as ${variant}.`,
+    message: `Chess Yes reviews standard chess only, and this game was played as ${variant}.`,
     retryable: false,
   };
 }

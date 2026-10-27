@@ -1,5 +1,5 @@
 {
-  "name": "kibitz-chess",
+  "name": "chess-yes",
   "private": true,
   "version": "0.1.0",
   "description": "Free, open-source chess game review. Stockfish runs in your browser: move classifications, accuracy, eval graph and plain-English explanations.",

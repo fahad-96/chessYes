@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/Button';
 import { appUpdates, type ServiceWorkerUpdates } from './registerServiceWorker';
 
 /**
- * "A new version of Kibitz is available" prompt, shown when a new service worker is waiting.
+ * "A new version of Chess Yes is available" prompt, shown when a new service worker is waiting.
  * Rendered next to <App /> in main.tsx, outside the router, so it appears on every screen.
  * Reload hands control to the new version and reloads once; Later hides the prompt (the new
- * version then starts the next time every Kibitz tab has been closed).
+ * version then starts the next time every Chess Yes tab has been closed).
  */
 export function UpdateToast({ updates = appUpdates }: { updates?: ServiceWorkerUpdates }) {
   const status = useSyncExternalStore(updates.subscribe, updates.getStatus, updates.getStatus);
@@ -25,7 +25,7 @@ export function UpdateToast({ updates = appUpdates }: { updates?: ServiceWorkerU
         <div className="pointer-events-auto flex w-full max-w-md flex-col gap-2 rounded-2xl border border-line bg-surface-2 p-3 shadow-lg shadow-black/20 sm:flex-row sm:items-center sm:gap-3 sm:pl-4 motion-safe:transition-[opacity,translate] motion-safe:duration-300 motion-safe:starting:translate-y-2 motion-safe:starting:opacity-0">
           <p className="flex min-w-0 items-center gap-2.5 text-sm text-text sm:flex-1">
             <RefreshCw aria-hidden="true" className="size-4 shrink-0 text-accent" />
-            <span>A new version of Kibitz is available</span>
+            <span>A new version of Chess Yes is available</span>
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setDismissed(true)} disabled={reloading}>

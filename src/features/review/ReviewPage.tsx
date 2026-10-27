@@ -240,7 +240,7 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = `${record.white.name} vs ${record.black.name} · Kibitz`;
+    document.title = `${record.white.name} vs ${record.black.name} · Chess Yes`;
     return () => {
       document.title = previousTitle;
     };

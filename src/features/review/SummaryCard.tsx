@@ -204,8 +204,8 @@ export function SummaryCard({
       {!review &&
         (reviewFailed ? (
           <p className="text-sm text-danger" role="alert">
-            The move ratings could not be calculated for this game. This is a bug in Kibitz: please
-            report it together with the link to this page.
+            The move ratings could not be calculated for this game. This is a bug in Chess Yes:
+            please report it together with the link to this page.
           </p>
         ) : (
           <p className="text-sm text-muted">

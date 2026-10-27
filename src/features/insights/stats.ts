@@ -184,7 +184,7 @@ export const ENDING_LABELS: Record<Ending, string> = {
 /**
  * Reads the ending from the record's termination text. Both sources describe it in
  * English: Chess.com's PGN Termination tag ("Hikaru won on time", "Game drawn by
- * repetition") and the descriptions Kibitz builds for Lichess ("Draw by stalemate").
+ * repetition") and the descriptions Chess Yes builds for Lichess ("Draw by stalemate").
  */
 export function endingOf(record: GameRecord): Ending {
   const full = (record.termination ?? '').toLowerCase();

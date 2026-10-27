@@ -82,7 +82,7 @@ export interface PlayerLibraryState {
   entries: PlayerEntry[] | null;
   /**
    * The player's reviewed games that are left out because their accuracies are on another
-   * scale: saved with the other Settings choice, or by an older version of Kibitz.
+   * scale: saved with the other Settings choice, or by an older version of Chess Yes.
    */
   leftOut: number;
   failed: boolean;

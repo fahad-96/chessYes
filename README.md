@@ -1,19 +1,21 @@
-# Kibitz
+# Chess Yes
 
 **Free, open-source chess game review.** Enter a Chess.com or Lichess username, pick a game, and get a full review: eval bar and graph, every move classified, accuracy for both players, and plain-English explanations that show on the board _why_ a move was a blunder or a brilliant find, read aloud if you like.
 
 Stockfish runs in your browser, so there is no account, no paywall and no server bill.
 
-> Kibitz is an independent project. It is not affiliated with, endorsed by, or connected to Chess.com or Lichess.
+**Live:** https://chessyes.netlify.app · Created and maintained by [Fahad Yousuf](https://fahad-yousuf.netlify.app/)
+
+> Chess Yes is an independent project. It is not affiliated with, endorsed by, or connected to Chess.com or Lichess.
 
 ## Features
 
 - **Game lookup** from Chess.com (Published-Data API) and Lichess, or paste any PGN
 - **Full-game analysis** with Stockfish 19 (WebAssembly, in a Web Worker) on your device. A quick first pass shows a complete review within seconds, the full pass then replaces it move by move, and a deeper double-check re-examines the key moments. Progress is saved, so a closed tab resumes where it stopped
 - **Move classifications:** Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Miss
-- **Accuracy** for both players, from Kibitz's open model calibrated against published accuracy figures from Chess.com game reviews (close to them, not identical), or on the Lichess scale (Settings → Accuracy scale)
+- **Accuracy** for both players, from Chess Yes's open model calibrated against published accuracy figures from Chess.com game reviews (close to them, not identical), or on the Lichess scale (Settings → Accuracy scale)
 - **Eval bar and eval graph**: click the graph to jump to any move
-- **"Show why" with tactics**: a blunder shows the reply that punishes it, a brilliant or great move the idea behind it, played out on the board with arrows. Kibitz spots forks, pins, skewers, discovered attacks and checks, hanging pieces, promotions and back-rank mates: _"You sacrifice the rook on h7: after Kxh7, Nf6+ forks the king and queen and wins the queen."_ Your opponent's moves are explained to you: _"You reply Rxg7+, forking their king and bishop, and win the bishop."_
+- **"Show why" with tactics**: a blunder shows the reply that punishes it, a brilliant or great move the idea behind it, played out on the board with arrows. Chess Yes spots forks, pins, skewers, discovered attacks and checks, hanging pieces, promotions and back-rank mates: _"You sacrifice the rook on h7: after Kxh7, Nf6+ forks the king and queen and wins the queen."_ Your opponent's moves are explained to you: _"You reply Rxg7+, forking their king and bishop, and win the bishop."_
 - **Voice coach**: hear each move's verdict and the reason as you step through the game, or let it narrate the key moments while the board plays them. It uses your device's voices; an optional natural voice (Kokoro-82M) runs on your GPU
 - **Explore and retry**: play your own moves from any position with a live engine evaluation, step through the engine's best line, retry a mistake with hints, or work through all of yours with Learn
 - **Share** a link to a move, the FEN, the PGN, or an annotated PGN with labels, evaluations, clocks and the stories as comments
@@ -27,7 +29,7 @@ Stockfish runs in your browser, so there is no account, no paywall and no server
 
 Each move is judged by how much it lowers your chance of winning (win %), computed from Stockfish's evaluation before and after the move. Losing 2 points of win % or less is Excellent; losing more than 20 is a Blunder. Brilliant (a sound sacrifice), Great (the only good move) and Miss (a real chance let slip) have their own documented rules.
 
-The explanations are rule-based too: no AI writes them. Kibitz replays the engine's line, finds the tactic in it and tells it in a sentence or two.
+The explanations are rule-based too: no AI writes them. Chess Yes replays the engine's line, finds the tactic in it and tells it in a sentence or two.
 
 Every rule and threshold is documented in [docs/CLASSIFICATION.md](docs/CLASSIFICATION.md) and lives in one file, [src/core/thresholds.ts](src/core/thresholds.ts).
 
@@ -89,7 +91,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Kibitz is free software, licensed under the [GNU GPL v3.0 or later](LICENSE).
+Chess Yes is free software, licensed under the [GNU GPL v3.0 or later](LICENSE).
 
 It bundles [Stockfish](https://github.com/official-stockfish/Stockfish) via [stockfish.js](https://github.com/nmrugg/stockfish.js) (GPL-3.0) and uses [chessground](https://github.com/lichess-org/chessground) (GPL-3.0), [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) and the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0). The win % curve and the alternative accuracy scale follow [Lichess](https://github.com/lichess-org/lila).
 

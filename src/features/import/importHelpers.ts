@@ -97,7 +97,7 @@ export function parseGameLink(text: string): GameLink | null {
 }
 
 export const CHESSCOM_LINK_MESSAGE =
-  'That is a Chess.com game link. Kibitz cannot open those directly: search for the player on ' +
+  'That is a Chess.com game link. Chess Yes cannot open those directly: search for the player on ' +
   'the home page and pick the game from their list, or copy the PGN on Chess.com ' +
   '(Share → PGN) and paste it here.';
 
@@ -114,12 +114,12 @@ export function notPgnMessage(text: string, parseError: string): string | null {
   if (FEN_RE.test(input)) {
     return (
       'That looks like a FEN, which describes a single position. ' +
-      'Kibitz reviews whole games: paste the PGN of the game, with its moves.'
+      'Chess Yes reviews whole games: paste the PGN of the game, with its moves.'
     );
   }
   if (URL_RE.test(input)) {
     return (
-      'That is a link, not a PGN. Kibitz opens Lichess game links directly; for other sites, ' +
+      'That is a link, not a PGN. Chess Yes opens Lichess game links directly; for other sites, ' +
       'copy the game’s PGN (usually under Share or Download) and paste it here.'
     );
   }

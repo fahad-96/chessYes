@@ -1,9 +1,9 @@
 /**
- * The two scales Kibitz can judge moves on. Each one is a complete model: how an engine
+ * The two scales Chess Yes can judge moves on. Each one is a complete model: how an engine
  * evaluation becomes a win %, how the win % a move loses becomes that move's accuracy, and
  * how move accuracies become a game accuracy.
  *
- * - 'calibrated' (the default): Kibitz's own model, calibrated against the accuracy figures
+ * - 'calibrated' (the default): Chess Yes's own model, calibrated against the accuracy figures
  *   published by Chess.com game reviews. It is not Chess.com's model (that one is not public);
  *   it is an open model whose three numbers were fitted so that its accuracies land close to
  *   the published ones. Labels and the eval graph use its win % too.
@@ -23,7 +23,7 @@ export const DEFAULT_ACCURACY_MODEL: AccuracyModel = 'calibrated';
  *
  * How they were fitted: 225 rated games from the public Chess.com API that carry published
  * accuracies, 45 in each average-rating band (under 1000, 1000-1400, 1400-1800, 1800-2200,
- * 2200 and up; blitz, rapid and daily). Every game was analysed by Kibitz itself (Stockfish 19
+ * 2200 and up; blitz, rapid and daily). Every game was analysed by Chess Yes itself (Stockfish 19
  * lite at depth 16, MultiPV 2, the Standard preset), and the three numbers below were chosen
  * to minimise the mean absolute error against the published accuracies, with 5-fold
  * cross-validation by game (9 games per band in each fold).

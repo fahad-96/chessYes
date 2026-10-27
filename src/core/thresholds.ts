@@ -15,7 +15,7 @@ export const THRESHOLDS = {
    * <= mistake → Mistake, anything larger → Blunder.
    * (The engine's own top move, or any move that loses nothing, is Best.)
    * These are the published bounds of Chess.com's expected-points labels (0.02 / 0.05 /
-   * 0.10 / 0.20), used here on Kibitz's own calibrated win % scale.
+   * 0.10 / 0.20), used here on Chess Yes's own calibrated win % scale.
    */
   loss: {
     excellent: 2,

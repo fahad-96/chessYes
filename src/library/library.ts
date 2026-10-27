@@ -176,7 +176,7 @@ export async function getLibraryEntries(): Promise<LibraryEntry[]> {
 }
 
 /**
- * Entries saved by an older version of Kibitz (an older LIBRARY_VERSION). They are ignored
+ * Entries saved by an older version of Chess Yes (an older LIBRARY_VERSION). They are ignored
  * everywhere else; this only lets the UI explain where those games went. Never throws.
  */
 export async function getOutdatedEntries(): Promise<OutdatedEntry[]> {

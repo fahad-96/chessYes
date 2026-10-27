@@ -172,7 +172,7 @@ describe('endings', () => {
     ['Game drawn by insufficient material', '1/2-1/2', 'insufficient'],
     ['Game drawn by timeout vs insufficient material', '1/2-1/2', 'time-vs-insufficient'],
     ['Game drawn by 50-move rule', '1/2-1/2', 'fifty-move'],
-    // Kibitz's Lichess descriptions.
+    // Chess Yes's Lichess descriptions.
     ['Night-King96 won by checkmate', '0-1', 'checkmate'],
     ['Checkmate', '1-0', 'checkmate'],
     ['DrNykterstein won (opponent left the game)', '1-0', 'abandonment'],

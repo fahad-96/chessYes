@@ -62,7 +62,7 @@ export default function InsightsPage() {
   if (!isPlatform(params.platform)) {
     return (
       <Notice icon={<SearchX className="h-6 w-6" />} title="Unknown game site">
-        Kibitz can load games from Chess.com and Lichess.
+        Chess Yes can load games from Chess.com and Lichess.
       </Notice>
     );
   }
@@ -79,7 +79,7 @@ export default function InsightsPage() {
 }
 
 function PlayerInsights({ platform, username }: { platform: Platform; username: string }) {
-  useDocumentTitle(`${username} · Insights · Kibitz`);
+  useDocumentTitle(`${username} · Insights · Chess Yes`);
   const playerKey = cacheKey(platform, username);
   const games = usePlayerGames(platform, username);
   const { data, status, loadMore, loadingMore, error } = games;

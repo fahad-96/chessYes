@@ -1,4 +1,4 @@
-# Contributing to Kibitz
+# Contributing to Chess Yes
 
 Thanks for helping make free game review better for every chess player. This guide covers setup, how the code is organised, and what a good pull request looks like.
 
@@ -73,15 +73,15 @@ Rules of thumb:
 
 ## Reporting a wrong classification
 
-Open an issue with the game (link or PGN), the move, what Kibitz said and what you expected. Please include the analysis depth from Settings. Engine depth changes evaluations, so "wrong" sometimes means "shallow".
+Open an issue with the game (link or PGN), the move, what Chess Yes said and what you expected. Please include the analysis depth from Settings. Engine depth changes evaluations, so "wrong" sometimes means "shallow".
 
 ## Pull requests
 
 - Keep PRs focused; one feature or fix per PR.
 - Add or update tests for logic changes.
 - Check UI changes at phone width (320-400px) and in the classic, dark and light themes, with tap targets of at least 40px.
-- Don't use another site's name, logo or visual design as Kibitz branding.
+- Don't use another site's name, logo or visual design as Chess Yes branding.
 
 ## License
 
-Kibitz is licensed under GPL-3.0-or-later (it ships Stockfish, which is GPL-3.0). By contributing you agree that your contributions are licensed under the same terms.
+Chess Yes is licensed under GPL-3.0-or-later (it ships Stockfish, which is GPL-3.0). By contributing you agree that your contributions are licensed under the same terms.

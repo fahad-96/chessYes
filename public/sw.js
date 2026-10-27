@@ -1,5 +1,5 @@
 /*
- * Kibitz service worker: offline start, offline analysis and update prompts.
+ * Chess Yes service worker: offline start, offline analysis and update prompts.
  *
  * Hand-written (no Workbox) so every caching rule can be read in this one file. Only
  * production builds register it (src/app/registerServiceWorker.ts).
@@ -27,14 +27,14 @@
  *   - Anything else: network first, with a small capped runtime cache as the fallback.
  *
  * Updates. A new worker installs in the background and then waits. The page shows
- * "A new version of Kibitz is available"; its Reload button posts SKIP_WAITING, this worker
+ * "A new version of Chess Yes is available"; its Reload button posts SKIP_WAITING, this worker
  * takes over, deletes the previous version's caches and the page reloads once.
  */
 
 const BUILD_ID = '__KIBITZ_BUILD_ID__';
 const PRECACHE = /* __KIBITZ_PRECACHE__ */ { shell: [], assets: [], engine: [] };
 
-/** Cache names include the scope, so two copies of Kibitz on one origin never collide. */
+/** Cache names include the scope, so two copies of Chess Yes on one origin never collide. */
 const SCOPE = self.registration.scope;
 const CACHE_PREFIX = `kibitz@${new URL(SCOPE).pathname}:`;
 const PRECACHE_CACHE = `${CACHE_PREFIX}precache-${BUILD_ID}`;

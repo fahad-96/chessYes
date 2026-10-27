@@ -12,7 +12,7 @@ import {
 export interface PuzzleData {
   /** null while loading. */
   entries: LibraryEntry[] | null;
-  /** Reviewed games saved by an older version of Kibitz, which no longer count. */
+  /** Reviewed games saved by an older version of Chess Yes, which no longer count. */
   outdated: number;
   progress: ReadonlyMap<string, PuzzleProgress>;
   activity: readonly string[];

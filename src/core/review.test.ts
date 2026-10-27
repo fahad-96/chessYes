@@ -833,7 +833,7 @@ describe('buildGameReview: stories behind the labels', () => {
 });
 
 describe('buildGameReview: a rated game (the one that started the calibration)', () => {
-  // Kibitz's own depth-16 analysis of a 10-minute game between two players rated about 830.
+  // Chess Yes's own depth-16 analysis of a 10-minute game between two players rated about 830.
   // Its Chess.com review counted 3 Misses for White and none for Black.
   const rated = RATED_GAMES.find((game) => game.id === USER_GAME_ID)!;
   const book = createOpeningBook(openingsJson as unknown as OpeningBookData);

@@ -1,5 +1,5 @@
 /**
- * Rated games with the accuracies their Chess.com game reviews published, and Kibitz's own
+ * Rated games with the accuracies their Chess.com game reviews published, and Chess Yes's own
  * analyses of them (Stockfish 19 lite, depth 16, MultiPV 2, the Standard preset), taken
  * from the dataset the calibrated model was fitted on (see accuracyModel.ts). The first is
  * the game that started the calibration; the others are the first game of each other

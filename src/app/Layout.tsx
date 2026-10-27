@@ -3,7 +3,7 @@ import { FileUp, Info, Puzzle, ScanSearch, Settings } from 'lucide-react';
 import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { GithubIcon } from '@/components/ui/GithubIcon';
 import { Logo } from '@/components/ui/Logo';
-import { CLASSIFICATION_DOC_URL, REPO_URL } from '@/features/about/links';
+import { AUTHOR_NAME, AUTHOR_URL, CLASSIFICATION_DOC_URL, REPO_URL } from '@/features/about/links';
 import { cn } from '@/lib/cn';
 import { useSettings, type BoardTheme, type ThemeSetting } from '@/state/settings';
 
@@ -79,7 +79,7 @@ function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-chrome/80 backdrop-blur-md supports-[backdrop-filter]:bg-chrome/70">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4">
-        <Link to="/" aria-label="Kibitz home" className="-ml-1 rounded-lg px-1 py-1">
+        <Link to="/" aria-label="Chess Yes home" className="-ml-1 rounded-lg px-1 py-1">
           <Logo />
         </Link>
         <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1">
@@ -124,36 +124,49 @@ function Header() {
 }
 
 function Footer() {
-  const linkClass = 'underline-offset-4 hover:text-text hover:underline';
+  const linkClass =
+    'underline underline-offset-4 decoration-line hover:text-text hover:decoration-current';
+  const quietLinkClass = 'underline-offset-4 hover:text-text hover:underline';
   return (
     <footer className="border-t border-line">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-sm text-muted sm:flex-row sm:items-start sm:justify-between">
-        <p className="max-w-xl leading-relaxed">
-          Kibitz is free and open-source software (GPL-3.0). Analysis by Stockfish, running on your
-          device. Not affiliated with Chess.com or Lichess.
-        </p>
-        <ul className="flex flex-wrap gap-x-4 gap-y-1">
-          <li>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-sm text-muted">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+          <p>
+            Chess Yes is open source under the GPL-3.0 licence.{' '}
             <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
-              Source code
+              Read the code
             </a>
-          </li>
-          <li>
-            <a
-              href={CLASSIFICATION_DOC_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={linkClass}
-            >
-              How moves are classified
+            .
+          </p>
+          <p>
+            Created and maintained by{' '}
+            <a href={AUTHOR_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {AUTHOR_NAME}
             </a>
-          </li>
-          <li>
-            <Link to="/about" className={linkClass}>
-              Licenses
-            </Link>
-          </li>
-        </ul>
+          </p>
+        </div>
+        <div className="flex flex-col gap-1 text-xs sm:flex-row sm:items-baseline sm:justify-between">
+          <p className="max-w-xl leading-relaxed">
+            Analysis by Stockfish, running on your device. Not affiliated with Chess.com or Lichess.
+          </p>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1">
+            <li>
+              <a
+                href={CLASSIFICATION_DOC_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={quietLinkClass}
+              >
+                How moves are classified
+              </a>
+            </li>
+            <li>
+              <Link to="/about" className={quietLinkClass}>
+                Licenses
+              </Link>
+            </li>
+          </ul>
+        </div>
       </div>
     </footer>
   );

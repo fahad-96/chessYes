@@ -30,7 +30,7 @@ interface Candidate {
 
 /** /import: paste or upload a PGN and review it. */
 export default function ImportPage() {
-  useDocumentTitle('Import PGN · Kibitz');
+  useDocumentTitle('Import PGN · Chess Yes');
   const navigate = useNavigate();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);

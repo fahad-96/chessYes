@@ -1,6 +1,6 @@
 # Architecture
 
-Kibitz is a static single-page app. There is no backend: game data comes straight from public APIs, and the chess engine runs in the user's browser. Hosting is free on any static host (GitHub Pages, Cloudflare Pages, Netlify).
+Chess Yes is a static single-page app. There is no backend: game data comes straight from public APIs, and the chess engine runs in the user's browser. Hosting is free on any static host (GitHub Pages, Cloudflare Pages, Netlify).
 
 ## Data flow of a review
 
@@ -104,7 +104,7 @@ Everything can be cleared in Settings → Storage, or with the browser's site da
 
 **Cache analyses, not reviews.** IndexedDB stores the raw engine output per game and settings. Reviews are rebuilt from it in milliseconds, so classification rules and explanations can change without invalidating anyone's cache, and an interrupted analysis resumes where it stopped.
 
-**Win %, not centipawns.** Losing 150 centipawns matters in an equal position and barely matters when you are a rook up. Measuring loss in win % treats both correctly. Kibitz's win % and accuracy are an open model calibrated against published accuracy figures from Chess.com game reviews (the Lichess formulas remain available as a second accuracy scale). See [CLASSIFICATION.md](CLASSIFICATION.md).
+**Win %, not centipawns.** Losing 150 centipawns matters in an equal position and barely matters when you are a rook up. Measuring loss in win % treats both correctly. Chess Yes's win % and accuracy are an open model calibrated against published accuracy figures from Chess.com game reviews (the Lichess formulas remain available as a second accuracy scale). See [CLASSIFICATION.md](CLASSIFICATION.md).
 
 **Rule-based explanations.** Stories come from replaying the engine's line with chess.js and a small attack map, not from a language model: they are free, instant, work offline, and every sentence can be traced to a rule and a test.
 

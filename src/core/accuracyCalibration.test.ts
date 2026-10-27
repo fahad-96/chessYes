@@ -1,6 +1,6 @@
 /**
  * Opt-in tool: analyses a dataset of real games that carry published accuracies from
- * another site, so Kibitz's accuracy model can be calibrated against them.
+ * another site, so Chess Yes's accuracy model can be calibrated against them.
  *
  *   ACCURACY_DATASET  JSON file: [{ url, pgn, white: { rating }, black: { rating }, accuracies }]
  *   ACCURACY_OUT      directory for one analysis file per game (existing files are skipped)

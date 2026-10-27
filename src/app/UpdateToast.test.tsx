@@ -35,7 +35,7 @@ describe('UpdateToast', () => {
     expect(screen.queryByText(/new version/)).toBeNull();
 
     act(() => updates.set('available'));
-    expect(screen.getByText('A new version of Kibitz is available')).toBeTruthy();
+    expect(screen.getByText('A new version of Chess Yes is available')).toBeTruthy();
   });
 
   it('announces the prompt through a live region that is always mounted', () => {
@@ -44,7 +44,7 @@ describe('UpdateToast', () => {
     const region = container.querySelector('[aria-live="polite"]');
     expect(region).toBeTruthy();
     act(() => updates.set('available'));
-    expect(region?.textContent).toContain('A new version of Kibitz is available');
+    expect(region?.textContent).toContain('A new version of Chess Yes is available');
   });
 
   it('applies the update on Reload and disables the buttons while reloading', () => {

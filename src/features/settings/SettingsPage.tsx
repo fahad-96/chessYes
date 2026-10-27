@@ -75,7 +75,7 @@ function autoPreset(): PresetId | null {
 
 /** /settings: analysis depth and accuracy scale, appearance, review display, voice and storage. */
 export default function SettingsPage() {
-  useDocumentTitle('Settings · Kibitz');
+  useDocumentTitle('Settings · Chess Yes');
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <header>
@@ -832,7 +832,7 @@ function StorageSection() {
     >
       {usage !== null && (
         <p className="tabular mb-4 text-sm text-muted">
-          Kibitz is using about {formatBytes(usage)} on this device.
+          Chess Yes is using about {formatBytes(usage)} on this device.
         </p>
       )}
       <div className="divide-y divide-line">

@@ -1,8 +1,8 @@
-# How Kibitz judges moves
+# How Chess Yes judges moves
 
-This is the public specification for every number Kibitz shows in a game review: win %, accuracy, the move labels (Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Miss) and the explanations behind them. It is written for chess players who want to know why a move got its label, and for developers who want to change the rules.
+This is the public specification for every number Chess Yes shows in a game review: win %, accuracy, the move labels (Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Miss) and the explanations behind them. It is written for chess players who want to know why a move got its label, and for developers who want to change the rules.
 
-Everything is computed in your browser from Stockfish's evaluations. Win % and accuracy use Kibitz's own open model, **calibrated against the accuracy figures published by Chess.com game reviews** ([section 2](#calibration)). It is not Chess.com's model, which is not public, and its numbers are close to Chess.com's but not identical. The open formulas of [Lichess](https://github.com/lichess-org/lila) remain available as a second accuracy scale. The label rules are Kibitz's own and are listed in full below.
+Everything is computed in your browser from Stockfish's evaluations. Win % and accuracy use Chess Yes's own open model, **calibrated against the accuracy figures published by Chess.com game reviews** ([section 2](#calibration)). It is not Chess.com's model, which is not public, and its numbers are close to Chess.com's but not identical. The open formulas of [Lichess](https://github.com/lichess-org/lila) remain available as a second accuracy scale. The label rules are Chess Yes's own and are listed in full below.
 
 | What                 | Code                                                        |
 | -------------------- | ----------------------------------------------------------- |
@@ -20,7 +20,7 @@ If this document and the code ever disagree, the code is what runs, and the disa
 
 ## 1. Win percentage
 
-Stockfish reports evaluations in centipawns (100 = one pawn) or as "mate in N". Kibitz converts every evaluation into the side's chance of winning, from 0 to 100:
+Stockfish reports evaluations in centipawns (100 = one pawn) or as "mate in N". Chess Yes converts every evaluation into the side's chance of winning, from 0 to 100:
 
 ```
 win % (White) = 100 / (1 + e^(−0.0019874 × cp))
@@ -43,13 +43,13 @@ win % (White) = 100 / (1 + e^(−0.0019874 × cp))
 | ±10.0 or more             | 87.9 / 12.1 |
 | Forced mate, or checkmate | 100 / 0     |
 
-This is the curve of the Lichess model (lila `WinPercent.scala`) with a slope about half as steep (Lichess: 0.00368208, which makes +3.0 worth 75.1 %), and with forced mates counted as certain wins instead of as ten pawns. Both changes come from the [calibration](#calibration): they are what brings Kibitz's accuracies close to the published ones. The same win % drives the labels, the eval graph and the eval bar.
+This is the curve of the Lichess model (lila `WinPercent.scala`) with a slope about half as steep (Lichess: 0.00368208, which makes +3.0 worth 75.1 %), and with forced mates counted as certain wins instead of as ten pawns. Both changes come from the [calibration](#calibration): they are what brings Chess Yes's accuracies close to the published ones. The same win % drives the labels, the eval graph and the eval bar.
 
 **Why win % instead of centipawns?** The same centipawn drop matters very differently depending on the position. Going from 0.0 to −3.0 costs 14.5 points of win % (a Mistake); going from +10.0 to +7.0 costs 7.9 points (an Inaccuracy), because you are still winning; going from +15 to +12 costs nothing. Measuring in win % treats all three fairly.
 
 ### Win % lost by a move
 
-For every move Kibitz compares two numbers, both from the **mover's** point of view:
+For every move Chess Yes compares two numbers, both from the **mover's** point of view:
 
 - **Win % before** (`winBefore`): the evaluation of the engine's best line in the position before the move, that is, what you could have kept with best play.
 - **Win % after** (`winAfter`): the evaluation of the engine's best line in the position after the move you played.
@@ -82,10 +82,10 @@ A player who has not moved yet (for example while analysis is still running) is 
 
 ### Calibration
 
-Chess.com shows an accuracy for both players at the end of a game review. Its model is proprietary, so Kibitz does not copy it. Instead, Kibitz's open model has three numbers (the win % slope, and the scale and decay of the move curve) that were **fitted so that its accuracies land close to the published ones** (constants and details: [`src/core/accuracyModel.ts`](../src/core/accuracyModel.ts)):
+Chess.com shows an accuracy for both players at the end of a game review. Its model is proprietary, so Chess Yes does not copy it. Instead, Chess Yes's open model has three numbers (the win % slope, and the scale and decay of the move curve) that were **fitted so that its accuracies land close to the published ones** (constants and details: [`src/core/accuracyModel.ts`](../src/core/accuracyModel.ts)):
 
-- **Data:** 225 rated games from the public Chess.com API that carry published accuracies, 45 in each average-rating band (under 1000, 1000-1400, 1400-1800, 1800-2200, 2200 and up), blitz, rapid and daily. Kibitz analysed every game itself, with the browser engine at the Standard preset (Stockfish 19 lite, depth 16, MultiPV 2).
-- **Fit:** the numbers minimise the mean absolute error between Kibitz's and the published accuracies, checked with 5-fold cross-validation by game: each game is predicted by a fit that did not see it.
+- **Data:** 225 rated games from the public Chess.com API that carry published accuracies, 45 in each average-rating band (under 1000, 1000-1400, 1400-1800, 1800-2200, 2200 and up), blitz, rapid and daily. Chess Yes analysed every game itself, with the browser engine at the Standard preset (Stockfish 19 lite, depth 16, MultiPV 2).
+- **Fit:** the numbers minimise the mean absolute error between Chess Yes's and the published accuracies, checked with 5-fold cross-validation by game: each game is predicted by a fit that did not see it.
 - **Result on held-out games** (450 player-games):
 
 | Error vs published accuracy | Lichess formulas | Calibrated |
@@ -101,9 +101,9 @@ Chess.com shows an accuracy for both players at the end of a game review. Its mo
 
 The biggest single improvement is counting a forced mate as a certain win. A version that also took the players' ratings into account improved the error by only 0.1 point, so the model does not use ratings.
 
-So expect Kibitz's accuracy to be within about 3 points of Chess.com's on average and within 5 points for most players, but not the same number: the engine, the search depth and the model all differ. [`src/core/accuracyModel.test.ts`](../src/core/accuracyModel.test.ts) checks five of the games against their published figures, so a change cannot silently undo the calibration.
+So expect Chess Yes's accuracy to be within about 3 points of Chess.com's on average and within 5 points for most players, but not the same number: the engine, the search depth and the model all differ. [`src/core/accuracyModel.test.ts`](../src/core/accuracyModel.test.ts) checks five of the games against their published figures, so a change cannot silently undo the calibration.
 
-Example: a 10-minute game between two players rated about 830, which Chess.com rated 73.2 for White and 56.6 for Black. The Lichess formulas give 81.8 and 70.3 on Kibitz's analysis; the calibrated model gives 68.9 and 59.2.
+Example: a 10-minute game between two players rated about 830, which Chess.com rated 73.2 for White and 56.6 for Black. The Lichess formulas give 81.8 and 70.3 on Chess Yes's analysis; the calibrated model gives 68.9 and 59.2.
 
 ### The Lichess scale
 
@@ -130,7 +130,7 @@ Brilliant and Great can only upgrade a Best (or, for Brilliant, Excellent) move.
 
 ### Base labels
 
-All bounds are inclusive and come from `THRESHOLDS.loss`. They are the published bounds of Chess.com's labels (0.02, 0.05, 0.10 and 0.20 expected points), which Kibitz applies to its own calibrated win %.
+All bounds are inclusive and come from `THRESHOLDS.loss`. They are the published bounds of Chess.com's labels (0.02, 0.05, 0.10 and 0.20 expected points), which Chess Yes applies to its own calibrated win %.
 
 | Label          | Rule                                                                |
 | -------------- | ------------------------------------------------------------------- |
@@ -153,7 +153,7 @@ A forced mate counts as 100 % (0 % for the side that gets mated), so letting you
 - mate → +3.0 (64.5 %) loses 35.5 points: a Blunder;
 - at −5.0 (27.0 %), allowing a forced mate loses 27 points: a Blunder; at −10.0 or worse (12.1 %), 12.1 points: a Mistake.
 
-A slower mate loses nothing, and neither does delivering checkmate. (On the Lichess scale every mate is worth ten pawns, so Kibitz used to need separate "mate swing" rules for these cases; the calibrated scale does not.)
+A slower mate loses nothing, and neither does delivering checkmate. (On the Lichess scale every mate is worth ten pawns, so Chess Yes used to need separate "mate swing" rules for these cases; the calibrated scale does not.)
 
 ### Book
 
@@ -224,14 +224,14 @@ A move is a **Miss** when you had a real chance, to cash in or to punish your op
 
 Being better is not a chance by itself: spoiling a won position when there was nothing concrete to take is a plain Inaccuracy, Mistake or Blunder. A move that leaves you clearly worse stays a Mistake or Blunder too, because the position it throws away matters more than the chance that went with it.
 
-Example, from a 10-minute game between two players rated about 830 (`src/core/__fixtures__/rated`, Kibitz's depth-16 analysis):
+Example, from a 10-minute game between two players rated about 830 (`src/core/__fixtures__/rated`, Chess Yes's depth-16 analysis):
 
 - **23.Re1** (mate in 6 → 77.0 %) and **25.Re6+** (mate in 1 → 87.9 %) let a forced mate go: Misses.
 - 11...Bh5? lets White trap the bishop with g4. 13.Nd5 does not play it at once (67.7 % → 57.8 %), but the engine line after Nd5 still wins the bishop (...a5 Bxd4 exd4 g4 Bxg4 fxg4): an Inaccuracy, because the chance is only delayed, not missed.
 - 18.Qh2 gives back most of a winning position (66.3 % → 52.0 %), but the best move 18.Nh3 wins nothing: a Mistake.
 - 23...Qc8, right after White's Miss, allows mate again: a Blunder, not a Miss, because Black is lost after it.
 
-Chess.com's review of this game counted 3 Misses for White and none for Black; Kibitz finds 2 and none (which moves Chess.com picked is not published, so the rule was not tuned to match it). On the 225 rated games, Misses come up about 1.4 times per player and game below a rating of 1400, 1.1 times at 1400-1800 and 0.4 times above 1800.
+Chess.com's review of this game counted 3 Misses for White and none for Black; Chess Yes finds 2 and none (which moves Chess.com picked is not published, so the rule was not tuned to match it). On the 225 rated games, Misses come up about 1.4 times per player and game below a rating of 1400, 1.1 times at 1400-1800 and 0.4 times above 1800.
 
 The label used to be called Missed Win, under an earlier rule (a winning position let slip to roughly equal) that this one replaces. Its key in the code (`missedWin`) and the puzzle theme's key (`missed-win`) keep the old name.
 
@@ -271,7 +271,7 @@ The explanation leads with the story when the story shows something concrete: a 
 
 ### Motifs
 
-A motif is a tactical pattern created by one move (`findMotifs` in `src/core/tactics.ts`). Kibitz prefers missing a pattern to naming one that is not there.
+A motif is a tactical pattern created by one move (`findMotifs` in `src/core/tactics.ts`). Chess Yes prefers missing a pattern to naming one that is not there.
 
 | Motif                          | Rule                                                                                                                                                                                                                                                                                                  |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -305,14 +305,14 @@ Stories and explanations are written to the player who made the move. When the r
 - **Brilliant and Great are heuristics.** "Sound sacrifice" and "only good move" are judged from material counts and two engine lines. They catch most real brilliancies and only-moves but will sometimes miss one (for example a positional sacrifice of a pawn, a sacrifice that only pays off beyond the exchange on one square, or a queen left en prise that was already attacked, such as Fischer's 17...Be6 against Byrne in 1956, which is Great) or flag an obvious one. A sacrifice the engine only finds at a higher depth is missed too: Kasparov's 24.Rxd4 against Topalov (1999) needs more than depth 16.
 - **Mates.** Every forced mate counts as 100 %, whatever its length, so choosing a slower mate when a faster one existed loses nothing. A long mate that the search after the move does not find again (a horizon effect) can make a sound move look like a Mistake or a Miss.
 - **Win % is a model.** Its slope was fitted to the published accuracies of games at every level (see [Calibration](#calibration)). It does not know your rating or the clock.
-- **Calibrated, not identical.** Kibitz's accuracy is usually within a few points of Chess.com's, but the engines, depths and models differ, so the numbers and labels will not always match. The calibration was done at the Standard preset (depth 16); the Fast and Deep presets were not fitted separately.
+- **Calibrated, not identical.** Chess Yes's accuracy is usually within a few points of Chess.com's, but the engines, depths and models differ, so the numbers and labels will not always match. The calibration was done at the Standard preset (depth 16); the Fast and Deep presets were not fitted separately.
 - **Book coverage.** The book contains named lines from the Lichess dataset, not every popular sideline, so a game can leave "book" earlier than you might expect.
 
 ## 8. Proposing changes
 
 Classification rules are meant to be discussed in the open.
 
-1. Open an issue with an example game (link or PGN), the move, the label Kibitz gave, the label you expected, and the analysis depth from Settings.
+1. Open an issue with an example game (link or PGN), the move, the label Chess Yes gave, the label you expected, and the analysis depth from Settings.
 2. If you want to change a rule, change three things together in one pull request:
    - the code (`src/core/thresholds.ts` for numbers, `src/core/classify.ts` for rules, `src/core/accuracyModel.ts` for the calibrated constants),
    - the tests (`src/core/classify.test.ts`, and `src/core/review.test.ts` if review building changes; a change to win % or accuracy must keep `src/core/accuracyModel.test.ts` green),
@@ -323,4 +323,4 @@ Analyses are cached rather than reviews, so rule changes apply to every saved ga
 
 ## Credits
 
-The Lichess accuracy scale and the shape of the calibrated win % curve are from [Lichess](https://lichess.org) ([lila](https://github.com/lichess-org/lila), AGPL-3.0; the formulas are reimplemented here). The calibrated model was fitted to accuracy figures published by Chess.com game reviews; Kibitz is not affiliated with Chess.com. The opening book uses the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0-1.0). Evaluations come from [Stockfish](https://stockfishchess.org) (GPL-3.0).
+The Lichess accuracy scale and the shape of the calibrated win % curve are from [Lichess](https://lichess.org) ([lila](https://github.com/lichess-org/lila), AGPL-3.0; the formulas are reimplemented here). The calibrated model was fitted to accuracy figures published by Chess.com game reviews; Chess Yes is not affiliated with Chess.com. The opening book uses the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0-1.0). Evaluations come from [Stockfish](https://stockfishchess.org) (GPL-3.0).

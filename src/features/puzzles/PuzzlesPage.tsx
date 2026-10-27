@@ -87,7 +87,7 @@ function isThemeFilter(value: string | null): value is ThemeFilter {
 
 /** /puzzles: puzzles built from the mistakes in the player's reviewed games. */
 export default function PuzzlesPage() {
-  useDocumentTitle('Puzzles · Kibitz');
+  useDocumentTitle('Puzzles · Chess Yes');
   const { entries, outdated, progress, activity, record } = usePuzzleData();
   const [params, setParams] = useSearchParams();
 
@@ -453,7 +453,7 @@ function EmptyCard({ title, children }: { title: string; children: ReactNode }) 
 
 /**
  * No reviewed games with a known player yet. `outdated` games were reviewed by an older
- * version of Kibitz: they no longer count, which the card explains.
+ * version of Chess Yes: they no longer count, which the card explains.
  */
 function NoGamesState({ outdated }: { outdated: number }) {
   const recent = useSettings((s) => s.recent[0]);
@@ -463,7 +463,7 @@ function NoGamesState({ outdated }: { outdated: number }) {
       <EmptyCard title="Puzzles come from your reviewed games">
         {outdated > 0 && (
           <p className="max-w-md text-sm leading-relaxed text-muted">
-            Kibitz has changed how it scores games since you last reviewed, so those games need a
+            Chess Yes has changed how it scores games since you last reviewed, so those games need a
             fresh review before they make puzzles again. Your puzzle progress is kept.
           </p>
         )}
@@ -474,7 +474,7 @@ function NoGamesState({ outdated }: { outdated: number }) {
         </p>
         <p className="max-w-md text-sm leading-relaxed text-muted">
           Look up your Chess.com or Lichess games and review a few. (Imported PGNs don’t count:
-          Kibitz can’t tell which side you played.)
+          Chess Yes can’t tell which side you played.)
         </p>
         <div className="mt-2 flex flex-wrap justify-center gap-2">
           {recent && (

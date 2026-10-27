@@ -1,7 +1,7 @@
 import { cn } from '@/lib/cn';
 
 /**
- * The Kibitz mark: a speech bubble with "!?" (the annotation for an interesting
+ * The Chess Yes mark: a speech bubble with "!?" (the annotation for an interesting
  * move), because kibitzing means commenting on a game you are watching.
  * Same drawing as public/favicon.svg, but coloured with theme tokens.
  */
@@ -27,12 +27,12 @@ export function LogoMark({ className, size = 28 }: { className?: string; size?: 
   );
 }
 
-/** Mark plus the "Kibitz" wordmark. */
+/** Mark plus the "Chess Yes" wordmark. */
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
       <LogoMark />
-      <span className="text-lg font-bold tracking-tight text-text">Kibitz</span>
+      <span className="text-lg font-bold tracking-tight text-text">Chess Yes</span>
     </span>
   );
 }
