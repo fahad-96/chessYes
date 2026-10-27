@@ -135,7 +135,7 @@ const LABEL_PHRASES: Record<Classification, string> = {
   inaccuracy: 'an inaccuracy',
   mistake: 'a mistake',
   blunder: 'a blunder',
-  missedWin: 'a missed win',
+  missedWin: 'a miss',
 };
 
 const ERRORS: ReadonlySet<Classification> = new Set([
@@ -171,7 +171,7 @@ const EXPLANATION_LABELS = [
   'Inaccuracy',
   'Mistake',
   'Blunder',
-  'Missed win',
+  'Miss',
   'The only legal move',
 ];
 const LEADING_LABEL = new RegExp(`^(?:${EXPLANATION_LABELS.join('|')})(?:[.!]+|$)\\s*`, 'i');

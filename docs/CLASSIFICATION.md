@@ -1,48 +1,51 @@
 # How Kibitz judges moves
 
-This is the public specification for every number Kibitz shows in a game review: win %, accuracy, the move labels (Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Missed Win) and the explanations behind them. It is written for chess players who want to know why a move got its label, and for developers who want to change the rules.
+This is the public specification for every number Kibitz shows in a game review: win %, accuracy, the move labels (Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Miss) and the explanations behind them. It is written for chess players who want to know why a move got its label, and for developers who want to change the rules.
 
-Everything is computed in your browser from Stockfish's evaluations. The win % and accuracy formulas are the open formulas used by [Lichess](https://github.com/lichess-org/lila); the label rules are Kibitz's own and are listed in full below.
+Everything is computed in your browser from Stockfish's evaluations. Win % and accuracy use Kibitz's own open model, **calibrated against the accuracy figures published by Chess.com game reviews** ([section 2](#calibration)). It is not Chess.com's model, which is not public, and its numbers are close to Chess.com's but not identical. The open formulas of [Lichess](https://github.com/lichess-org/lila) remain available as a second accuracy scale. The label rules are Kibitz's own and are listed in full below.
 
-| What                 | Code                                                  |
-| -------------------- | ----------------------------------------------------- |
-| Every tunable number | [`src/core/thresholds.ts`](../src/core/thresholds.ts) |
-| Eval → win %         | [`src/core/winPercent.ts`](../src/core/winPercent.ts) |
-| Accuracy             | [`src/core/accuracy.ts`](../src/core/accuracy.ts)     |
-| Label rules          | [`src/core/classify.ts`](../src/core/classify.ts)     |
-| Sacrifice detection  | [`src/core/material.ts`](../src/core/material.ts)     |
-| Tactics and stories  | [`src/core/tactics.ts`](../src/core/tactics.ts)       |
-| Explanations         | [`src/core/explain.ts`](../src/core/explain.ts)       |
-| Putting it together  | [`src/core/review.ts`](../src/core/review.ts)         |
+| What                 | Code                                                        |
+| -------------------- | ----------------------------------------------------------- |
+| Every tunable number | [`src/core/thresholds.ts`](../src/core/thresholds.ts)       |
+| Calibrated constants | [`src/core/accuracyModel.ts`](../src/core/accuracyModel.ts) |
+| Eval → win %         | [`src/core/winPercent.ts`](../src/core/winPercent.ts)       |
+| Accuracy             | [`src/core/accuracy.ts`](../src/core/accuracy.ts)           |
+| Label rules          | [`src/core/classify.ts`](../src/core/classify.ts)           |
+| Sacrifice detection  | [`src/core/material.ts`](../src/core/material.ts)           |
+| Tactics and stories  | [`src/core/tactics.ts`](../src/core/tactics.ts)             |
+| Explanations         | [`src/core/explain.ts`](../src/core/explain.ts)             |
+| Putting it together  | [`src/core/review.ts`](../src/core/review.ts)               |
 
 If this document and the code ever disagree, the code is what runs, and the disagreement is a bug: please open an issue.
 
 ## 1. Win percentage
 
-Stockfish reports evaluations in centipawns (100 = one pawn) or as "mate in N". Kibitz converts every evaluation into the side's chance of winning, from 0 to 100, with the Lichess model (lila `WinPercent.scala`):
+Stockfish reports evaluations in centipawns (100 = one pawn) or as "mate in N". Kibitz converts every evaluation into the side's chance of winning, from 0 to 100:
 
 ```
-win % (White) = 50 + 50 × (2 / (1 + e^(−0.00368208 × cp)) − 1)
+win % (White) = 100 / (1 + e^(−0.0019874 × cp))
 ```
 
 - `cp` is the evaluation from White's point of view, **clamped to −1000…+1000**.
-- A forced mate counts as ±1000 centipawns, whatever its length.
+- A **forced mate** is a certain result: 100 % for the side that mates and 0 % for the side that gets mated, whatever its length.
 - Black's win % is `100 − White's win %`.
 - When the game is over on the board: the side that delivered **checkmate** has 100 %, the mated side 0 %. **Stalemate**, insufficient material, threefold repetition and the fifty-move rule are 50 %.
 
-| Evaluation (White)     | White win % |
-| ---------------------- | ----------- |
-| 0.0                    | 50.0        |
-| +0.5 / −0.5            | 54.6 / 45.4 |
-| +1.0 / −1.0            | 59.1 / 40.9 |
-| +2.0 / −2.0            | 67.6 / 32.4 |
-| +3.0 / −3.0            | 75.1 / 24.9 |
-| +5.0 / −5.0            | 86.3 / 13.7 |
-| +7.0 / −7.0            | 92.9 / 7.1  |
-| ±10.0 or more, or mate | 97.5 / 2.5  |
-| Checkmate on the board | 100 / 0     |
+| Evaluation (White)        | White win % |
+| ------------------------- | ----------- |
+| 0.0                       | 50.0        |
+| +0.5 / −0.5               | 52.5 / 47.5 |
+| +1.0 / −1.0               | 55.0 / 45.0 |
+| +2.0 / −2.0               | 59.8 / 40.2 |
+| +3.0 / −3.0               | 64.5 / 35.5 |
+| +5.0 / −5.0               | 73.0 / 27.0 |
+| +7.0 / −7.0               | 80.1 / 19.9 |
+| ±10.0 or more             | 87.9 / 12.1 |
+| Forced mate, or checkmate | 100 / 0     |
 
-**Why win % instead of centipawns?** The same centipawn drop matters very differently depending on the position. Going from 0.0 to −1.5 costs 13.5 points of win % (a Mistake); going from +7.0 to +5.5 costs 4.6 points (Good), because you are still winning. Measuring in win % treats both fairly.
+This is the curve of the Lichess model (lila `WinPercent.scala`) with a slope about half as steep (Lichess: 0.00368208, which makes +3.0 worth 75.1 %), and with forced mates counted as certain wins instead of as ten pawns. Both changes come from the [calibration](#calibration): they are what brings Kibitz's accuracies close to the published ones. The same win % drives the labels, the eval graph and the eval bar.
+
+**Why win % instead of centipawns?** The same centipawn drop matters very differently depending on the position. Going from 0.0 to −3.0 costs 14.5 points of win % (a Mistake); going from +10.0 to +7.0 costs 7.9 points (an Inaccuracy), because you are still winning; going from +15 to +12 costs nothing. Measuring in win % treats all three fairly.
 
 ### Win % lost by a move
 
@@ -59,30 +62,56 @@ A move can never "gain" in this model; a positive difference (the engine found m
 
 ## 2. Accuracy
 
-Accuracy follows lila `AccuracyPercent.scala` exactly.
-
 ### Per move
 
 ```
-accuracy = 103.1668100711649 × e^(−0.04354415386753951 × loss) − 3.166924740191411 + 1
+accuracy = 78.962 × e^(−0.13101 × loss) + 21.038
 ```
 
-clamped to 0…100, and exactly 100 when the move lost nothing. The final `+ 1` is Lichess's "uncertainty bonus" for imperfect engine analysis.
+and exactly 100 when the move lost nothing. A move that throws the game away scores about 21, never 0.
 
-| Win % lost    | 0   | 1    | 2    | 5    | 10   | 20   | 30   | 50  | 89+ |
-| ------------- | --- | ---- | ---- | ---- | ---- | ---- | ---- | --- | --- |
-| Move accuracy | 100 | 96.6 | 92.4 | 80.8 | 64.6 | 41.0 | 25.8 | 9.5 | 0   |
+| Win % lost    | 0   | 1    | 2    | 5    | 10   | 20   | 30   | 50   |
+| ------------- | --- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| Move accuracy | 100 | 90.3 | 81.8 | 62.1 | 42.3 | 26.8 | 22.6 | 21.2 |
 
 ### Per game
 
-A player's game accuracy is the average of two means of their move accuracies:
-
-1. **Volatility-weighted mean.** Each move is weighted by how sharp the game was around it: the population standard deviation of White's win % over a sliding window of positions, clamped to 0.5…12. The window size is `moves / 10` (integer division), clamped to 2…8; the first window is repeated so there is exactly one window per move. A mistake in a quiet position therefore counts less than one in a tactical melee.
-2. **Harmonic mean**, with each accuracy floored at 1 so that a single 0 % move cannot zero the whole game. The harmonic mean punishes a few very bad moves more than an ordinary average would.
-
-`game accuracy = (weighted mean + harmonic mean) / 2`
+A player's game accuracy is the **harmonic mean** of their move accuracies: `moves / Σ (1 / accuracy)`. Every move counts, including book moves, forced moves and the engine's top moves. The harmonic mean punishes a few very bad moves more than an ordinary average would: one Blunder among twenty perfect moves takes the game from 100 to about 85.
 
 A player who has not moved yet (for example while analysis is still running) is shown as 100 internally and as "—" in the interface.
+
+### Calibration
+
+Chess.com shows an accuracy for both players at the end of a game review. Its model is proprietary, so Kibitz does not copy it. Instead, Kibitz's open model has three numbers (the win % slope, and the scale and decay of the move curve) that were **fitted so that its accuracies land close to the published ones** (constants and details: [`src/core/accuracyModel.ts`](../src/core/accuracyModel.ts)):
+
+- **Data:** 225 rated games from the public Chess.com API that carry published accuracies, 45 in each average-rating band (under 1000, 1000-1400, 1400-1800, 1800-2200, 2200 and up), blitz, rapid and daily. Kibitz analysed every game itself, with the browser engine at the Standard preset (Stockfish 19 lite, depth 16, MultiPV 2).
+- **Fit:** the numbers minimise the mean absolute error between Kibitz's and the published accuracies, checked with 5-fold cross-validation by game: each game is predicted by a fit that did not see it.
+- **Result on held-out games** (450 player-games):
+
+| Error vs published accuracy | Lichess formulas | Calibrated |
+| --------------------------- | ---------------- | ---------- |
+| Mean absolute error         | 6.3              | **3.0**    |
+| Average (bias)              | +3.1             | +0.4       |
+| Players within 5 points     | 52 %             | 85 %       |
+| Under 1000                  | 7.1              | 3.2        |
+| 1000-1400                   | 7.6              | 3.6        |
+| 1400-1800                   | 7.6              | 2.7        |
+| 1800-2200                   | 5.4              | 2.8        |
+| 2200 and up                 | 3.8              | 2.5        |
+
+The biggest single improvement is counting a forced mate as a certain win. A version that also took the players' ratings into account improved the error by only 0.1 point, so the model does not use ratings.
+
+So expect Kibitz's accuracy to be within about 3 points of Chess.com's on average and within 5 points for most players, but not the same number: the engine, the search depth and the model all differ. [`src/core/accuracyModel.test.ts`](../src/core/accuracyModel.test.ts) checks five of the games against their published figures, so a change cannot silently undo the calibration.
+
+Example: a 10-minute game between two players rated about 830, which Chess.com rated 73.2 for White and 56.6 for Black. The Lichess formulas give 81.8 and 70.3 on Kibitz's analysis; the calibrated model gives 68.9 and 59.2.
+
+### The Lichess scale
+
+The open Lichess formulas (lila `WinPercent.scala` and `AccuracyPercent.scala`) are available as a second accuracy scale: **Settings → Analysis → Accuracy scale → Lichess formula** (`accuracyModel: 'lichess'` in `buildGameReview`). Only the accuracies change; labels, win % and the graph stay on the calibrated scale. Switching rebuilds the open review at once from the same analysis. Reviewed games in the library keep the scale they were saved with: insights leave out games on the other scale until they are reviewed again (the batch analysis does that, reusing saved engine results where it can).
+
+- Win %: `50 + 50 × (2 / (1 + e^(−0.00368208 × cp)) − 1)`, cp clamped to ±1000, a forced mate counted as ±1000.
+- Per move: `103.1668100711649 × e^(−0.04354415386753951 × loss) − 3.166924740191411 + 1`, clamped to 0…100 and 100 when nothing was lost (the `+ 1` is Lichess's "uncertainty bonus").
+- Per game: the average of a volatility-weighted mean (each move weighted by the standard deviation of White's win % over a sliding window of `moves / 10` positions, clamped to 2…8, with weights clamped to 0.5…12) and a harmonic mean (move accuracies floored at 1).
 
 ## 3. Labels
 
@@ -94,14 +123,14 @@ The first rule that matches wins:
 2. **Forced**
 3. **Brilliant**
 4. **Great**
-5. **Missed Win**
-6. The base label: **Best**, **Excellent**, **Good**, **Inaccuracy**, **Mistake** or **Blunder**, made worse by a [mate swing](#mate-swings) when there is one
+5. **Miss**
+6. The base label: **Best**, **Excellent**, **Good**, **Inaccuracy**, **Mistake** or **Blunder**
 
-Brilliant and Great can only upgrade a Best (or, for Brilliant, Excellent) move. Missed Win can only replace an Inaccuracy, Mistake or Blunder. So the precedence only matters between Book, Forced, Brilliant and Great.
+Brilliant and Great can only upgrade a Best (or, for Brilliant, Excellent) move. Miss can only replace an Inaccuracy, Mistake or Blunder. So the precedence only matters between Book, Forced, Brilliant and Great.
 
 ### Base labels
 
-All bounds are inclusive and come from `THRESHOLDS.loss`.
+All bounds are inclusive and come from `THRESHOLDS.loss`. They are the published bounds of Chess.com's labels (0.02, 0.05, 0.10 and 0.20 expected points), which Kibitz applies to its own calibrated win %.
 
 | Label          | Rule                                                                |
 | -------------- | ------------------------------------------------------------------- |
@@ -114,20 +143,17 @@ All bounds are inclusive and come from `THRESHOLDS.loss`.
 
 The engine's top move is always at least Best, even when the search after the move sees a small drop. That drop is search noise (a deeper look at the same line), not a fault of the move.
 
-Example: from +0.3 (52.8 %) to −5.0 (13.7 %) loses 39.1 points: a Blunder.
+Example: from +0.3 (51.5 %) to −5.0 (27.0 %) loses 24.5 points: a Blunder.
 
-### Mate swings
+### Forced mates
 
-Every mate counts as 97.5 %, the same as being ten pawns up, so the win % alone misses two kinds of mistake: letting your own forced mate slip while staying far ahead, and walking into a forced mate when you were already losing. Kibitz follows Lichess here (`THRESHOLDS.mate`). For any move other than the engine's top move, the base label becomes at least:
+A forced mate counts as 100 % (0 % for the side that gets mated), so letting your own mate slip or walking into one costs win % like any other move:
 
-| The move...                                                        | Blunder            | Mistake                     | Inaccuracy           |
-| ------------------------------------------------------------------ | ------------------ | --------------------------- | -------------------- |
-| **allows a forced mate** you were not already facing               | win % before > 7 % | 2.5 % < win % before ≤ 7 %  | win % before ≤ 2.5 % |
-| **lets your forced mate slip** (no mate and no checkmate after it) | win % after < 93 % | 93 % ≤ win % after < 97.5 % | win % after ≥ 97.5 % |
+- mate → +10.0 or more (87.9 %) loses 12.1 points: a Mistake (and usually a [Miss](#miss));
+- mate → +3.0 (64.5 %) loses 35.5 points: a Blunder;
+- at −5.0 (27.0 %), allowing a forced mate loses 27 points: a Blunder; at −10.0 or worse (12.1 %), 12.1 points: a Mistake.
 
-7 %, 2.5 %, 93 % and 97.5 % are about −7.0, −10.0, +7.0 and +10.0. If the win % loss already gives a worse label, that label stays. A slower mate is not a mate swing, and neither is delivering checkmate.
-
-Examples: you have mate in 2 but take a rook instead and stay +15: an Inaccuracy ("You had a forced mate in 2"), although the win % did not move. At −8.0 (5.0 %) you allow mate in 3: a Mistake, although only 2.5 points of win % were lost.
+A slower mate loses nothing, and neither does delivering checkmate. (On the Lichess scale every mate is worth ten pawns, so Kibitz used to need separate "mate swing" rules for these cases; the calibrated scale does not.)
 
 ### Book
 
@@ -156,7 +182,7 @@ A move is **Brilliant** when all of these hold (`THRESHOLDS.brilliant`):
 | The base label is Best or Excellent and `loss ≤ maxLoss`               | 2         | The sacrifice has to be (nearly) the best move: it must be _sound_                   |
 | The move offers material (see [Sacrifices](#sacrifices))               | ≥ 2 pawns | An exchange sacrifice or more; giving up a single pawn is a gambit, not a brilliancy |
 | The mover is not worse after the move: `winAfter ≥ minWinAfter`        | 50 %      | A sacrifice that leaves you worse is desperation, not brilliance                     |
-| The engine's second choice does **not** also keep `≥ maxSecondBestWin` | 97 %      | If a quiet move wins just as easily, the sacrifice was flashy but unnecessary        |
+| The engine's second choice does **not** also keep `≥ maxSecondBestWin` | 87 %      | If a quiet move wins just as easily (+9.5 or a mate), the sacrifice was unnecessary  |
 
 When the engine searched only one line (MultiPV 1), the last condition cannot be checked and the sacrifice gets the benefit of the doubt.
 
@@ -164,35 +190,50 @@ When the engine searched only one line (MultiPV 1), the last condition cannot be
 
 A move is **Great** when all of these hold (`THRESHOLDS.great`):
 
-| Condition                                                                                              | Threshold | Why                                                                    |
-| ------------------------------------------------------------------------------------------------------ | --------- | ---------------------------------------------------------------------- |
-| It is the engine's top move                                                                            |           |                                                                        |
-| The engine's second choice is at least `minGapToSecond` worse                                          | 15 points | Every alternative was clearly worse: this was the only move            |
-| The second choice keeps less than `maxSecondBestWin`                                                   | 70 %      | If the alternative was still winning, the move was not critical        |
-| The search after the move confirms it: `loss ≤ maxLoss`                                                | 5 points  | A top move that the next search refutes was not a great find           |
-| It does not answer a check                                                                             |           | With few legal options, finding the one that works is rarely hard      |
-| It does not deliver checkmate                                                                          |           | The mate is the end of a winning plan; the moves that set it up decide |
-| It is not a simple recapture on the square the opponent just captured on                               |           | Taking a piece back is usually forced-looking and obvious              |
-| It is not a capture that wins at least `obviousCaptureGain` outright (static exchange before the move) | 2 pawns   | Taking a piece that was simply hanging is obvious, not great           |
+| Condition                                                                                              | Threshold | Why                                                                     |
+| ------------------------------------------------------------------------------------------------------ | --------- | ----------------------------------------------------------------------- |
+| It is the engine's top move                                                                            |           |                                                                         |
+| The engine's second choice is at least `minGapToSecond` worse                                          | 9 points  | Every alternative was clearly worse: this was the only move             |
+| The second choice keeps less than `maxSecondBestWin`                                                   | 61 %      | If the alternative was still clearly better (+2.3), it was not critical |
+| The search after the move confirms it: `loss ≤ maxLoss`                                                | 3 points  | A top move that the next search refutes was not a great find            |
+| It does not answer a check                                                                             |           | With few legal options, finding the one that works is rarely hard       |
+| It does not deliver checkmate                                                                          |           | The mate is the end of a winning plan; the moves that set it up decide  |
+| It is not a simple recapture on the square the opponent just captured on                               |           | Taking a piece back is usually forced-looking and obvious               |
+| It is not a capture that wins at least `obviousCaptureGain` outright (static exchange before the move) | 2 pawns   | Taking a piece that was simply hanging is obvious, not great            |
 
 The gap is measured between the best and second-best lines of the **same** search (`winBefore − winSecondBest`), so it is not distorted by the different depth of the search after the move. Great needs MultiPV 2: without a second line a move is never Great.
 
 A move that delivers checkmate stays Best, however bad the alternatives. (Brilliant would still take precedence, but a mating move never offers material: nothing can be taken after checkmate.)
 
-Example: the only move that keeps the balance when every alternative loses a piece (second choice −2.0, 32.4 %, a gap of 17.6 points) is Great.
+Example: the only move that keeps the balance when every alternative loses a piece (second choice −2.0, 40.2 %, a gap of 9.8 points) is Great.
 
-### Missed Win
+The Brilliant and Great numbers were first tuned on the Lichess win % scale (second choice below 97 % and 70 %, a gap of 15 points, a loss of at most 5) and carried over to the calibrated scale so that the same moves keep their labels. On the 225 rated games of the [calibration](#calibration), 95 % of the earlier Great moves and 44 of the 46 Brilliant moves kept their label, at almost the same rate (Great 0.69 → 0.73 and Brilliant 0.10 → 0.10 per player and game); on the 12 games in `src/core/__fixtures__/games` the rates did not change at all.
 
-A move is a **Missed Win** when (`THRESHOLDS.missedWin`):
+### Miss
 
-| Condition                                                                      | Threshold           |
-| ------------------------------------------------------------------------------ | ------------------- |
-| The base label is Inaccuracy, Mistake or Blunder                               |                     |
-| The position before was winning: `winBefore ≥ minWinBefore`                    | 75 % (about +3.0)   |
-| The position after is roughly balanced: `minWinAfter ≤ winAfter < maxWinAfter` | 40 % ≤ win % < 60 % |
-| `loss ≥ minLoss`                                                               | 10 points           |
+A move is a **Miss** when you had a real chance, to cash in or to punish your opponent's mistake, and the move lets it slip without throwing the game away (`THRESHOLDS.miss`):
 
-Example: from +4.0 (81.3 %) to +1.0 (59.1 %) is a Missed Win. From +4.0 to −3.0 (24.9 %) is simply a Blunder: the position is not balanced but lost. (With the current numbers the last condition is implied by the others; it is a safety net for when the thresholds are tuned.)
+| Condition                                                                                                                                                                                                                                                                                                                                                                         | Threshold         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| The base label is Inaccuracy, Mistake or Blunder                                                                                                                                                                                                                                                                                                                                  |                   |
+| There was a chance, at least one of:                                                                                                                                                                                                                                                                                                                                              |                   |
+| • the engine's best move starts a forced mate                                                                                                                                                                                                                                                                                                                                     |                   |
+| • the engine's best line wins material: over the part of the line the review shows for it ("Best was ..."), you come out at least `minMaterialWon` further ahead than over the line after your move; taking back a piece that was just taken does not count, and neither does material your move wins as well (taking with another piece, or winning the same piece a move later) | 2 pawns           |
+| • your opponent's previous move was an error (Inaccuracy or worse) that gave away at least `minGift`, and your move gives back at least `minShareGivenBack` of it                                                                                                                                                                                                                 | 10 points, half   |
+| You are not clearly worse after the move: `winAfter ≥ minWinAfter`                                                                                                                                                                                                                                                                                                                | 40 % (about −2.0) |
+
+Being better is not a chance by itself: spoiling a won position when there was nothing concrete to take is a plain Inaccuracy, Mistake or Blunder. A move that leaves you clearly worse stays a Mistake or Blunder too, because the position it throws away matters more than the chance that went with it.
+
+Example, from a 10-minute game between two players rated about 830 (`src/core/__fixtures__/rated`, Kibitz's depth-16 analysis):
+
+- **23.Re1** (mate in 6 → 77.0 %) and **25.Re6+** (mate in 1 → 87.9 %) let a forced mate go: Misses.
+- 11...Bh5? lets White trap the bishop with g4. 13.Nd5 does not play it at once (67.7 % → 57.8 %), but the engine line after Nd5 still wins the bishop (...a5 Bxd4 exd4 g4 Bxg4 fxg4): an Inaccuracy, because the chance is only delayed, not missed.
+- 18.Qh2 gives back most of a winning position (66.3 % → 52.0 %), but the best move 18.Nh3 wins nothing: a Mistake.
+- 23...Qc8, right after White's Miss, allows mate again: a Blunder, not a Miss, because Black is lost after it.
+
+Chess.com's review of this game counted 3 Misses for White and none for Black; Kibitz finds 2 and none (which moves Chess.com picked is not published, so the rule was not tuned to match it). On the 225 rated games, Misses come up about 1.4 times per player and game below a rating of 1400, 1.1 times at 1400-1800 and 0.4 times above 1800.
+
+The label used to be called Missed Win, under an earlier rule (a winning position let slip to roughly equal) that this one replaces. Its key in the code (`missedWin`) and the puzzle theme's key (`missed-win`) keep the old name.
 
 ## 4. Sacrifices
 
@@ -212,7 +253,7 @@ Piece values (`PIECE_VALUES`): pawn 1, knight 3, bishop 3, rook 5, queen 9.
 
 ## 5. Key moments
 
-The review highlights up to 8 moves: Brilliant and Great moves first, then the Missed Wins, Blunders and Mistakes that cost the most win %. They are shown in game order.
+The review highlights up to 8 moves: Brilliant and Great moves first, then the Misses, Blunders and Mistakes that cost the most win %. They are shown in game order.
 
 ## 6. Explanations
 
@@ -220,7 +261,7 @@ Every move gets a short plain-English explanation, and the moves where it matter
 
 | What gets a story                         | Story                                                                                                                              | Example                                                               |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Inaccuracy, Mistake, Blunder, Missed Win  | **Refutation** (`why`): the engine's line after the move, starting with the reply                                                  | "This leaves your rook on g8 unprotected: Bxg8 takes it for free."    |
+| Inaccuracy, Mistake, Blunder, Miss        | **Refutation** (`why`): the engine's line after the move, starting with the reply                                                  | "This leaves your rook on g8 unprotected: Bxg8 takes it for free."    |
 | ...when the engine preferred another move | **Missed** (`bestIdea`): the engine's line from the position before, with its best move                                            | "You missed Nf6+, which forks the king and queen and wins the queen." |
 | Brilliant, Great                          | **Idea** (`why`): the move followed by the engine's line                                                                           | "You sacrifice the queen on b8: after Nxb8, Rd8# is checkmate."       |
 | Best, Excellent                           | **Idea**, only when the move itself sets up a tactic that pays off in the line, and does more than win back material you were down | "Nf6+ forks the king and queen and wins the queen."                   |
@@ -262,8 +303,9 @@ Stories and explanations are written to the player who made the move. When the r
 - **Engine depth.** Evaluations come from Stockfish running on your device, at depth 12, 16 or 20 depending on the preset, with a time cap per position that can stop the search earlier on slow devices. A shallow search can misjudge sharp positions, so a "Blunder" may occasionally be a deep idea the engine did not see, or the other way round. Raising the depth in Settings gives more reliable labels.
 - **Horizon effects.** Each position is searched separately, so the evaluation before and after a move can come from searches that saw different things. This is why the engine's own top move is always at least Best.
 - **Brilliant and Great are heuristics.** "Sound sacrifice" and "only good move" are judged from material counts and two engine lines. They catch most real brilliancies and only-moves but will sometimes miss one (for example a positional sacrifice of a pawn, a sacrifice that only pays off beyond the exchange on one square, or a queen left en prise that was already attacked, such as Fischer's 17...Be6 against Byrne in 1956, which is Great) or flag an obvious one. A sacrifice the engine only finds at a higher depth is missed too: Kasparov's 24.Rxd4 against Topalov (1999) needs more than depth 16.
-- **Mates.** Every mate counts as ±10 pawns (97.5 %), so choosing a slower mate when a faster one existed loses nothing, and accuracy does not punish the [mate swings](#mate-swings) that the labels catch. Delivering checkmate on the board is 100 %.
-- **Win % is a model.** It was fitted by Lichess to games between strong players. It does not know your rating or the clock.
+- **Mates.** Every forced mate counts as 100 %, whatever its length, so choosing a slower mate when a faster one existed loses nothing. A long mate that the search after the move does not find again (a horizon effect) can make a sound move look like a Mistake or a Miss.
+- **Win % is a model.** Its slope was fitted to the published accuracies of games at every level (see [Calibration](#calibration)). It does not know your rating or the clock.
+- **Calibrated, not identical.** Kibitz's accuracy is usually within a few points of Chess.com's, but the engines, depths and models differ, so the numbers and labels will not always match. The calibration was done at the Standard preset (depth 16); the Fast and Deep presets were not fitted separately.
 - **Book coverage.** The book contains named lines from the Lichess dataset, not every popular sideline, so a game can leave "book" earlier than you might expect.
 
 ## 8. Proposing changes
@@ -272,8 +314,8 @@ Classification rules are meant to be discussed in the open.
 
 1. Open an issue with an example game (link or PGN), the move, the label Kibitz gave, the label you expected, and the analysis depth from Settings.
 2. If you want to change a rule, change three things together in one pull request:
-   - the code (`src/core/thresholds.ts` for numbers, `src/core/classify.ts` for rules),
-   - the tests (`src/core/classify.test.ts`, and `src/core/review.test.ts` if review building changes),
+   - the code (`src/core/thresholds.ts` for numbers, `src/core/classify.ts` for rules, `src/core/accuracyModel.ts` for the calibrated constants),
+   - the tests (`src/core/classify.test.ts`, and `src/core/review.test.ts` if review building changes; a change to win % or accuracy must keep `src/core/accuracyModel.test.ts` green),
    - this document.
 3. If the change alters labels for existing games, bump `REVIEW_FORMAT_VERSION` in `src/core/review.ts`.
 
@@ -281,4 +323,4 @@ Analyses are cached rather than reviews, so rule changes apply to every saved ga
 
 ## Credits
 
-The win % model and the accuracy formula are from [Lichess](https://lichess.org) ([lila](https://github.com/lichess-org/lila), AGPL-3.0; the formulas are reimplemented here). The opening book uses the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0-1.0). Evaluations come from [Stockfish](https://stockfishchess.org) (GPL-3.0).
+The Lichess accuracy scale and the shape of the calibrated win % curve are from [Lichess](https://lichess.org) ([lila](https://github.com/lichess-org/lila), AGPL-3.0; the formulas are reimplemented here). The calibrated model was fitted to accuracy figures published by Chess.com game reviews; Kibitz is not affiliated with Chess.com. The opening book uses the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0-1.0). Evaluations come from [Stockfish](https://stockfishchess.org) (GPL-3.0).

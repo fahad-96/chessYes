@@ -1,17 +1,18 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Check, Download, Monitor, Moon, Square, Sun, Trash2, Volume2 } from 'lucide-react';
+import { Check, Download, Square, Trash2, Volume2 } from 'lucide-react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Spinner } from '@/components/ui/Spinner';
 import { Toggle } from '@/components/ui/Toggle';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import type { AccuracyModel } from '@/core/accuracyModel';
 import { clearAnalysisCache } from '@/engine/cache';
 import { PRESETS, recommendPreset, type PresetId } from '@/engine/presets';
 import { clearPuzzleProgress, loadProgress } from '@/features/puzzles/progress';
 import { clearLibrary, getLibraryEntries } from '@/library/library';
 import { cn } from '@/lib/cn';
 import {
+  THEME_BOARD,
   useSettings,
   type BoardTheme,
   type SettingsState,
@@ -38,19 +39,30 @@ import {
 } from '@/voice/voice';
 import { formatBytes } from './formatBytes';
 
-const THEME_OPTIONS = [
-  { value: 'system', label: 'System', icon: <Monitor className="h-4 w-4" aria-hidden="true" /> },
-  { value: 'dark', label: 'Dark', icon: <Moon className="h-4 w-4" aria-hidden="true" /> },
-  { value: 'light', label: 'Light', icon: <Sun className="h-4 w-4" aria-hidden="true" /> },
-] as const satisfies readonly { value: ThemeSetting; label: string; icon: ReactNode }[];
+const THEME_OPTIONS: { value: ThemeSetting; label: string; description: string }[] = [
+  { value: 'classic', label: 'Classic', description: 'Charcoal and green, bold type' },
+  { value: 'system', label: 'System', description: 'Dark or light, like your device' },
+  { value: 'dark', label: 'Dark', description: 'Deep blue-grey with amber' },
+  { value: 'light', label: 'Light', description: 'Bright, for daylight' },
+];
 
 const BOARD_OPTIONS: { value: BoardTheme; label: string }[] = [
+  { value: 'green', label: 'Green' },
   { value: 'slate', label: 'Slate' },
   { value: 'walnut', label: 'Walnut' },
   { value: 'ocean', label: 'Ocean' },
 ];
 
 const PRESET_IDS: PresetId[] = ['fast', 'standard', 'deep'];
+
+const ACCURACY_OPTIONS: { value: AccuracyModel; label: string; description: string }[] = [
+  {
+    value: 'calibrated',
+    label: 'Calibrated (default)',
+    description: 'Tuned to match the accuracy figures big chess sites publish.',
+  },
+  { value: 'lichess', label: 'Lichess formula', description: 'The open formula used by Lichess.' },
+];
 
 /** The preset "Auto" resolves to on this device, or null if it cannot be determined. */
 function autoPreset(): PresetId | null {
@@ -61,7 +73,7 @@ function autoPreset(): PresetId | null {
   }
 }
 
-/** /settings: analysis depth, appearance, review display, voice and local storage. */
+/** /settings: analysis depth and accuracy scale, appearance, review display, voice and storage. */
 export default function SettingsPage() {
   useDocumentTitle('Settings · Kibitz');
   return (
@@ -143,37 +155,61 @@ function RadioCard({
 
 function AnalysisSection() {
   const preset = useSettings((s) => s.preset);
+  const accuracyModel = useSettings((s) => s.accuracyModel);
   const set = useSettings((s) => s.set);
   const [auto] = useState(autoPreset);
   return (
-    <Section
-      title="Analysis depth"
-      description="How deeply Stockfish searches each position. Deeper is more accurate but slower; every position also has a time cap so slow devices never stall."
-    >
-      <fieldset className="grid gap-2">
-        <legend className="sr-only">Analysis depth</legend>
-        <RadioCard
-          name="preset"
-          checked={preset === 'auto'}
-          onSelect={() => set({ preset: 'auto' })}
-          title="Auto"
-          description={
-            auto
-              ? `Picks a depth for this device. Here it uses ${PRESETS[auto].label}: ${PRESETS[auto].description}`
-              : 'Picks a depth for this device.'
-          }
-        />
-        {PRESET_IDS.map((id) => (
-          <RadioCard
-            key={id}
-            name="preset"
-            checked={preset === id}
-            onSelect={() => set({ preset: id })}
-            title={PRESETS[id].label}
-            description={PRESETS[id].description}
-          />
-        ))}
-      </fieldset>
+    <Section title="Analysis">
+      <div className="space-y-5">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Depth</legend>
+          <p className="text-sm text-muted">
+            How deeply Stockfish searches each position. Deeper is more accurate but slower; every
+            position also has a time cap so slow devices never stall.
+          </p>
+          <div className="grid gap-2">
+            <RadioCard
+              name="preset"
+              checked={preset === 'auto'}
+              onSelect={() => set({ preset: 'auto' })}
+              title="Auto"
+              description={
+                auto
+                  ? `Picks a depth for this device. Here it uses ${PRESETS[auto].label}: ${PRESETS[auto].description}`
+                  : 'Picks a depth for this device.'
+              }
+            />
+            {PRESET_IDS.map((id) => (
+              <RadioCard
+                key={id}
+                name="preset"
+                checked={preset === id}
+                onSelect={() => set({ preset: id })}
+                title={PRESETS[id].label}
+                description={PRESETS[id].description}
+              />
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Accuracy scale</legend>
+          <p className="text-sm text-muted">
+            How move and game accuracy are scored. Move labels are the same on both.
+          </p>
+          <div className="grid gap-2 min-[420px]:grid-cols-2">
+            {ACCURACY_OPTIONS.map((option) => (
+              <RadioCard
+                key={option.value}
+                name="accuracy-scale"
+                checked={accuracyModel === option.value}
+                onSelect={() => set({ accuracyModel: option.value })}
+                title={option.label}
+                description={option.description}
+              />
+            ))}
+          </div>
+        </fieldset>
+      </div>
     </Section>
   );
 }
@@ -185,18 +221,29 @@ function AppearanceSection() {
   return (
     <Section title="Appearance">
       <div className="space-y-5">
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Theme</p>
-          <SegmentedControl
-            label="Theme"
-            value={theme}
-            onChange={(value) => set({ theme: value })}
-            options={THEME_OPTIONS}
-          />
-        </div>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Theme</legend>
+          <div className="grid gap-2 min-[420px]:grid-cols-2">
+            {THEME_OPTIONS.map((option) => (
+              <RadioCard
+                key={option.value}
+                name="theme"
+                checked={theme === option.value}
+                onSelect={() => {
+                  // A theme can come with its own board (classic: green); it can be changed after.
+                  const board = THEME_BOARD[option.value];
+                  set(board ? { theme: option.value, boardTheme: board } : { theme: option.value });
+                }}
+                title={option.label}
+                description={option.description}
+                aside={<ThemePreview theme={option.value} />}
+              />
+            ))}
+          </div>
+        </fieldset>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Board</legend>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 min-[420px]:grid-cols-2 md:grid-cols-4">
             {BOARD_OPTIONS.map((option) => (
               <RadioCard
                 key={option.value}
@@ -211,6 +258,58 @@ function AppearanceSection() {
         </fieldset>
       </div>
     </Section>
+  );
+}
+
+/**
+ * A tiny page in a theme's own colours: header bar, a panel with a line of text and a
+ * green (or amber) button. index.css matches data-theme on any element, so the tokens
+ * inside resolve to that theme whatever the page uses. System shows dark and light halves.
+ */
+function ThemePreview({ theme }: { theme: ThemeSetting }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="relative block h-11 w-16 shrink-0 overflow-hidden rounded-md ring-1 ring-line"
+    >
+      {theme === 'system' ? (
+        <>
+          <span className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+            <ThemeMock theme="dark" />
+          </span>
+          <span className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
+            <ThemeMock theme="light" className="right-0 left-auto" />
+          </span>
+        </>
+      ) : (
+        <ThemeMock theme={theme} />
+      )}
+    </span>
+  );
+}
+
+function ThemeMock({ theme, className }: { theme: ThemeSetting; className?: string }) {
+  return (
+    <span
+      data-theme={theme}
+      className={cn('absolute inset-y-0 left-0 block w-16', className)}
+      style={{ background: 'var(--bg)' }}
+    >
+      <span className="absolute inset-x-0 top-0 h-2" style={{ background: 'var(--chrome)' }} />
+      <span
+        className="absolute inset-x-1.5 top-3 bottom-1.5 rounded-sm"
+        style={{ background: 'var(--surface)' }}
+      >
+        <span
+          className="absolute top-1.5 left-1.5 h-1 w-7 rounded-full"
+          style={{ background: 'var(--text)' }}
+        />
+        <span
+          className="absolute inset-x-1.5 bottom-1.5 h-2 rounded-[2px]"
+          style={{ background: 'var(--accent)', boxShadow: 'inset 0 -1px 0 var(--accent-edge)' }}
+        />
+      </span>
+    </span>
   );
 }
 

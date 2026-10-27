@@ -70,20 +70,21 @@ const OPERA = {
 
 describe('describeAdvantage', () => {
   it.each([
+    // Calibrated win %: 72 is about +4.7, 58 about +1.7, 53 about +0.6.
     [100, 'White is winning'],
-    [85, 'White is winning'],
-    [84.9, 'White is clearly better'],
-    [65, 'White is clearly better'],
-    [64.9, 'White is slightly better'],
-    [55, 'White is slightly better'],
-    [54.9, 'The position is equal'],
+    [72, 'White is winning'],
+    [71.9, 'White is clearly better'],
+    [58, 'White is clearly better'],
+    [57.9, 'White is slightly better'],
+    [53, 'White is slightly better'],
+    [52.9, 'The position is equal'],
     [50, 'The position is equal'],
-    [45.1, 'The position is equal'],
-    [45, 'Black is slightly better'],
-    [35.1, 'Black is slightly better'],
-    [35, 'Black is clearly better'],
-    [15.1, 'Black is clearly better'],
-    [15, 'Black is winning'],
+    [47.1, 'The position is equal'],
+    [47, 'Black is slightly better'],
+    [42.1, 'Black is slightly better'],
+    [42, 'Black is clearly better'],
+    [28.1, 'Black is clearly better'],
+    [28, 'Black is winning'],
     [0, 'Black is winning'],
   ])('White at %s reads "%s"', (whiteWin, text) => {
     expect(describeAdvantage(whiteWin)).toBe(text);
@@ -226,7 +227,7 @@ describe('explainMove: brilliant and great moves', () => {
     const after = (score: Score) =>
       explainMove({ ...input, secondBest: line(fenBefore, 'd4d5 c6d5', score) });
     expect(after(cp(200))).toContain('After d5 instead, you would be clearly better.');
-    expect(after(cp(60))).toContain('After d5 instead, you would be only slightly better.');
+    expect(after(cp(80))).toContain('After d5 instead, you would be only slightly better.');
   });
 
   it('says when the alternative would allow mate', () => {
@@ -266,7 +267,7 @@ describe('explainMove: mistakes', () => {
       classification: 'blunder',
       fenBefore,
       uci: 'a7a6',
-      best: line(fenBefore, 'd5d1 a1d1 h7h6 g5e3 b8b7', cp(-60)),
+      best: line(fenBefore, 'd5d1 a1d1 h7h6 g5e3 b8b7', cp(-80)),
       evalAfter: cp(480),
       reply: 'g5f6 g7f6 d1d5 g8g7 g2g3 b8c8',
     });
@@ -377,7 +378,7 @@ describe('explainMove: mistakes', () => {
     );
   });
 
-  it('says a winning chance was missed (Opera Game: 11.Qxb5+? instead of 11.Bxb5+)', () => {
+  it('says a chance was missed (Opera Game: 11.Qxb5+? instead of 11.Bxb5+)', () => {
     const input = setup({
       classification: 'missedWin',
       fenBefore: OPERA.before11,
@@ -388,8 +389,20 @@ describe('explainMove: mistakes', () => {
     });
     expect(input.winBefore).toBeGreaterThanOrEqual(75);
     expect(explainMove(input)).toBe(
-      'Missed win. You let a winning chance slip, and now the position is equal. ' +
-        'Best was Bxb5+, which keeps your winning chances.',
+      'Miss. You let the chance slip, and now the position is equal. ' +
+        'Best was Bxb5+, keeping a winning position.',
+    );
+    // A chance let slip while staying well ahead is not described as if it were good news.
+    const stillWinning = setup({
+      classification: 'missedWin',
+      fenBefore: OPERA.before11,
+      uci: 'b3b5',
+      best: line(OPERA.before11, 'c4b5 e8d8 e1c1 d8c7 d1d3 e7b4 b3f7 b4e7 d3c3 c7b6', cp(684)),
+      evalAfter: cp(500),
+      reply: 'e7d7 b5e5 f8e7 a1d1 b8c6 e5f4 d7g4 e4e5 g4f4 g5f4',
+    });
+    expect(explainMove(stillWinning)).toContain(
+      'You let the chance slip, though you are still winning.',
     );
   });
 
@@ -413,8 +426,8 @@ describe('explainMove: mistakes', () => {
       classification: 'mistake',
       fenBefore: AFTER_1E4_E5_2NF3,
       uci: 'h7h6',
-      winBefore: 80,
-      winAfter: 58,
+      winBefore: 65,
+      winAfter: 54,
     });
     expect(explainMove(input)).toBe(
       'Mistake. You were clearly better, but now you are only slightly better.',
@@ -431,8 +444,8 @@ describe('explainMove: robustness', () => {
       uci: 'zz',
       fenBefore: 'not a fen',
       fenAfter: 'not a fen',
-      winBefore: 60,
-      winAfter: 20,
+      winBefore: 55,
+      winAfter: 35,
       evalAfter: cp(-300),
       evalBest: cp(100),
       best: { uci: 'e2e4', san: 'e4', score: cp(100), pvUci: ['e2e4', 'e9e5'], pvSan: ['e4'] },

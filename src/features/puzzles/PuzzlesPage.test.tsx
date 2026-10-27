@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createStore, set } from 'idb-keyval';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BoardProps } from '@/components/Board';
 import { pvToSan } from '@/core/notation';
 import type { LineStory } from '@/core/types';
-import { clearLibrary, emptyCounts, saveToLibrary, type LibraryEntry } from '@/library/library';
+import {
+  LIBRARY_VERSION,
+  clearLibrary,
+  emptyCounts,
+  saveToLibrary,
+  type LibraryEntry,
+} from '@/library/library';
 import { useSettings } from '@/state/settings';
 import { clearPuzzleProgress, loadProgress } from './progress';
 import PuzzlesPage from './PuzzlesPage';
@@ -34,7 +41,7 @@ const SCHOLAR = 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq -
 
 function scholarEntry(): LibraryEntry {
   return {
-    v: 1,
+    v: LIBRARY_VERSION,
     gameId: 'lichess/abcd1234',
     record: {
       id: 'lichess/abcd1234',
@@ -50,6 +57,7 @@ function scholarEntry(): LibraryEntry {
     perspective: { platform: 'lichess', username: 'me', color: 'w' },
     reviewedAt: Date.now(),
     engine: { name: 'Stockfish', depth: 16, multiPv: 2 },
+    accuracyModel: 'calibrated',
     white: { accuracy: 70, counts: emptyCounts() },
     black: { accuracy: 60, counts: emptyCounts() },
     moves: [
@@ -63,6 +71,7 @@ function scholarEntry(): LibraryEntry {
         winBefore: 97.5,
         winAfter: 55,
         winLoss: 42.5,
+        accuracy: 8.4,
         winSecondBest: 60,
         best: { uci: 'h5f7', san: 'Qxf7#', pvUci: ['h5f7'], pvSan: pvToSan(SCHOLAR, ['h5f7']) },
       },
@@ -116,6 +125,15 @@ describe('PuzzlesPage', () => {
       '/insights/chesscom/Hikaru',
     );
     expect(screen.getByRole('link', { name: /Find my games/ }).getAttribute('href')).toBe('/');
+    expect(screen.queryByText(/need a fresh review/)).toBeNull();
+  });
+
+  it('says why games reviewed by an older version no longer make puzzles', async () => {
+    const older = { ...scholarEntry(), v: 1 };
+    await set(older.gameId, older, createStore('kibitz-library', 'entries'));
+    renderPage();
+    expect(await screen.findByText('Puzzles come from your reviewed games')).toBeTruthy();
+    expect(screen.getByText(/need a fresh review before they make puzzles again/)).toBeTruthy();
   });
 
   it('solves a puzzle, plays the line and moves on', async () => {

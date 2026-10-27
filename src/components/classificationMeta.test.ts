@@ -30,7 +30,7 @@ describe('verdictText', () => {
     expect(verdictText('h3', 'inaccuracy')).toBe('h3 is an inaccuracy');
     expect(verdictText('Bc4', 'excellent')).toBe('Bc4 is an excellent move');
     expect(verdictText('Qxd5', 'best')).toBe('Qxd5 is the best move');
-    expect(verdictText('Rxe6', 'missedWin')).toBe('Rxe6 is a missed win');
+    expect(verdictText('Rxe6', 'missedWin')).toBe('Rxe6 is a miss');
   });
 });
 

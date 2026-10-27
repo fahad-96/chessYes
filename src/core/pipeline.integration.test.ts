@@ -15,7 +15,7 @@ import openingsJson from './openings/data/openings.json';
 import { createOpeningBook, type OpeningBookData } from './openings';
 import { parsePgn } from './pgn';
 import { buildGameReview } from './review';
-import type { GameReview, MoveReview, ParsedGame } from './types';
+import type { GameReview, MoveReview, ParsedGame, PositionAnalysis } from './types';
 
 const OPERA_GAME = `[Event "Paris"]
 [Site "Paris FRA"]
@@ -33,7 +33,9 @@ const SETTINGS = { depth: 13, multiPv: 2, maxTimeMs: 60_000 };
 const TIMEOUT_MS = 300_000;
 
 let game: ParsedGame;
+let analyses: PositionAnalysis[];
 let review: GameReview;
+let reviewOptions: Parameters<typeof buildGameReview>[2];
 
 /** The review of the move with the given SAN, played by the given side. */
 function moveBy(color: 'w' | 'b', san: string): MoveReview {
@@ -63,12 +65,13 @@ beforeAll(async () => {
   const engine = new StockfishEngine({ createWorker: () => worker });
   try {
     await engine.init();
-    const analyses = await analyzeGame(game, { engine, settings: SETTINGS });
+    analyses = await analyzeGame(game, { engine, settings: SETTINGS });
     const book = createOpeningBook(openingsJson as unknown as OpeningBookData);
-    review = buildGameReview(game, analyses, {
+    reviewOptions = {
       book,
       engine: { name: engine.name, depth: SETTINGS.depth, multiPv: SETTINGS.multiPv },
-    });
+    };
+    review = buildGameReview(game, analyses, reviewOptions);
   } finally {
     engine.terminate();
   }
@@ -119,7 +122,7 @@ describe('review pipeline on the Opera Game (real engine, real book)', () => {
     );
   });
 
-  it('shows the refutation of every inaccuracy, mistake, blunder and missed win', () => {
+  it('shows the refutation of every inaccuracy, mistake, blunder and miss', () => {
     const errors = review.moves.filter((m) =>
       (['inaccuracy', 'mistake', 'blunder', 'missedWin'] as const).some(
         (label) => label === m.classification,
@@ -143,6 +146,20 @@ describe('review pipeline on the Opera Game (real engine, real book)', () => {
     const blackErrors = ['inaccuracy', 'mistake', 'blunder', 'missedWin'] as const;
     const total = blackErrors.reduce((sum, label) => sum + review.black.counts[label], 0);
     expect(total).toBeGreaterThan(0);
+  });
+
+  it('offers the Lichess accuracy scale without changing a label', () => {
+    const lichess = buildGameReview(game, analyses, { ...reviewOptions, accuracyModel: 'lichess' });
+    expect(lichess.moves.map((m) => m.classification)).toEqual(
+      review.moves.map((m) => m.classification),
+    );
+    expect(lichess.whiteWinPercents).toEqual(review.whiteWinPercents);
+    expect(lichess.black.accuracy).toBeLessThan(lichess.white.accuracy);
+    expect(lichess.white.accuracy).not.toBe(review.white.accuracy);
+    for (const player of [review.white, review.black, lichess.white, lichess.black]) {
+      expect(player.accuracy).toBeGreaterThan(0);
+      expect(player.accuracy).toBeLessThanOrEqual(100);
+    }
   });
 
   it('explains every move and highlights key moments', () => {

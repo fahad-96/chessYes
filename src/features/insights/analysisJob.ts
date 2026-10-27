@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { AccuracyModel } from '@/core/accuracyModel';
 import { loadOpeningBook, type OpeningBook } from '@/core/openings';
 import { parsePgn } from '@/core/pgn';
 import { buildGameReview } from '@/core/review';
@@ -18,7 +19,12 @@ import { cacheKey } from '@/features/games/playerGames';
 import { playerColor } from '@/features/games/gameList';
 import { getSharedEngine, prepareEngineForGame } from '@/features/review/engine';
 import { libraryEntryToSave } from '@/features/review/reviewHelpers';
-import { getLibraryEntry, saveToLibrary, type Perspective } from '@/library/library';
+import {
+  getLibraryEntry,
+  saveToLibrary,
+  type LibraryEntry,
+  type Perspective,
+} from '@/library/library';
 import { resolveGame } from '@/sources/resolveGame';
 import type { Platform } from '@/state/settings';
 
@@ -33,7 +39,8 @@ import type { Platform } from '@/state/settings';
  * one of these games later needs no engine at all.
  *
  * Only one job runs at a time: there is one engine per tab. Games already in the library
- * are skipped, and engine results are cached per position (engine/cache.ts), so a
+ * are skipped (unless their accuracies are on another scale than the one asked for: those
+ * are reviewed again), and engine results are cached per position (engine/cache.ts), so a
  * cancelled job resumes almost where it stopped when it is started again.
  */
 
@@ -103,6 +110,8 @@ export interface StartJobOptions {
   /** The games to review, newest first. Other variants are ignored. */
   records: readonly GameRecord[];
   presetId: PresetId;
+  /** The scale of the accuracies saved to the library (the Settings choice). */
+  accuracyModel: AccuracyModel;
 }
 
 /** Positions to analyse before partial results are written to the cache. */
@@ -409,9 +418,12 @@ async function runJob(
       ...(message ? { message } : {}),
     });
   };
-  const { platform, username } = options;
+  const { platform, username, accuracyModel } = options;
   const preset = PRESETS[options.presetId];
   const failures: JobFailure[] = [];
+  /** A stored review counts as done when its accuracies are on the scale asked for. */
+  const isDone = (entry: LibraryEntry | null): entry is LibraryEntry =>
+    entry?.accuracyModel === accuracyModel;
 
   // 1. Which games still need the engine? Reading the library and parsing is quick.
   const queue: QueuedGame[] = [];
@@ -423,7 +435,7 @@ async function runJob(
     if (!color) continue;
     const perspective: Perspective = { platform, username: username.trim().toLowerCase(), color };
     const existing = await getLibraryEntry(listed.id);
-    if (existing) {
+    if (isDone(existing)) {
       skipped += 1;
       // Reviews opened without a perspective learn whose game this is (puzzles use it).
       if (!existing.perspective) await saveToLibrary({ ...existing, perspective });
@@ -471,7 +483,7 @@ async function runJob(
     try {
       // The game may have been reviewed on the review screen since the job started.
       const existing = await getLibraryEntry(record.id);
-      if (existing) {
+      if (isDone(existing)) {
         if (!existing.perspective) await saveToLibrary({ ...existing, perspective });
         skipped += 1;
         set({ skipped, gameNumber: index + 1, current: null });
@@ -480,6 +492,7 @@ async function runJob(
       const review = await analyseOne(item, {
         engine: heldEngine(engine, record.id, signal),
         preset,
+        accuracyModel,
         book,
         signal,
         timing,
@@ -517,6 +530,7 @@ async function runJob(
 interface AnalyseOneOptions {
   engine: Engine;
   preset: Preset;
+  accuracyModel: AccuracyModel;
   book: OpeningBook | null;
   signal: AbortSignal;
   /** Updated with the time of every search. */
@@ -533,7 +547,7 @@ interface AnalyseOneOptions {
  * to the analysis cache under the key the review screen uses. Resolves with the review.
  */
 async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise<GameReview> {
-  const { engine, preset, book, signal, timing, onProgress } = options;
+  const { engine, preset, accuracyModel, book, signal, timing, onProgress } = options;
   const { record, game } = item;
   const positions = game.moves.length + 1;
   const moves = game.moves.length;
@@ -594,6 +608,7 @@ async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise
   // Verification pass, unless an earlier run (or the review screen) already did it.
   if (!refined) {
     const settings = refineSettings(preset);
+    // Only the labels matter here, and they do not depend on the accuracy scale.
     const plies = selectMovesToRefine(buildGameReview(game, full, { book, engine: engineInfo }));
     const indices = positionsToRefine(plies, working, settings.depth);
     timing.plannedPositions += positions;
@@ -653,7 +668,11 @@ async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise
     }
   }
 
-  return buildGameReview(game, working as PositionAnalysis[], { book, engine: engineInfo });
+  return buildGameReview(game, working as PositionAnalysis[], {
+    book,
+    engine: engineInfo,
+    accuracyModel,
+  });
 }
 
 /** Tests only: drops the job without waiting for it. */

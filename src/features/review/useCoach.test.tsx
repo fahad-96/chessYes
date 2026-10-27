@@ -64,6 +64,7 @@ function moveReview(ply: number): MoveReview {
 const review: GameReview = {
   version: 1,
   engine: { name: 'Stockfish', depth: 18, multiPv: 2 },
+  accuracyModel: 'calibrated',
   moves: game.moves.map((m) => moveReview(m.ply)),
   white: { accuracy: 90, counts: emptyCounts() },
   black: { accuracy: 90, counts: emptyCounts() },

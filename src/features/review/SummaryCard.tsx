@@ -23,32 +23,42 @@ function movesPlayed(player: PlayerReview): number {
   return CLASSIFICATIONS.reduce((sum, c) => sum + player.counts[c], 0);
 }
 
-function AccuracyTile({
-  name,
-  color,
-  player,
-}: {
-  name: string;
-  color: 'w' | 'b';
-  player: PlayerReview | null;
-}) {
+/** Avatar and name of a player, heading their column of the summary table. */
+function PlayerHead({ name, color }: { name: string; color: 'w' | 'b' }) {
+  return (
+    <span className="flex min-w-0 flex-col items-center gap-1" title={name}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'flex h-9 w-9 items-center justify-center rounded-md text-2xl leading-none ring-1',
+          color === 'w'
+            ? 'bg-[var(--eval-white)] text-[var(--eval-black)] ring-black/15'
+            : 'bg-[var(--eval-black)] text-[var(--eval-white)] ring-white/10',
+        )}
+      >
+        {color === 'w' ? '♔' : '♚'}
+      </span>
+      <span className="sr-only">{color === 'w' ? 'White: ' : 'Black: '}</span>
+      <span className="block w-full truncate text-center text-xs font-semibold">{name}</span>
+    </span>
+  );
+}
+
+/** A player's accuracy: White's in a light box, Black's in a dark one. */
+function AccuracyBox({ color, player }: { color: 'w' | 'b'; player: PlayerReview | null }) {
   // A player without reviewed moves has no meaningful accuracy yet.
   const value = player && movesPlayed(player) > 0 ? formatAccuracy(player.accuracy) : '—';
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1 rounded-xl bg-surface-2 px-3 py-2.5">
-      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
-        <span
-          aria-hidden="true"
-          className={cn(
-            'h-2 w-2 shrink-0 rounded-full border border-line',
-            color === 'w' ? 'bg-[var(--eval-white)]' : 'bg-[var(--eval-black)]',
-          )}
-        />
-        <span className="truncate">{name}</span>
-      </span>
-      <span className="tabular text-3xl leading-none font-bold tracking-tight">{value}</span>
-      <span className="text-xs text-muted">Accuracy</span>
-    </div>
+    <span
+      className={cn(
+        'tabular block rounded-lg py-2 text-center text-lg leading-tight font-extrabold tracking-tight ring-1 sm:text-xl',
+        color === 'w'
+          ? 'bg-[var(--eval-white)] text-[#1c1b19] ring-black/15'
+          : 'bg-[var(--eval-black)] text-[#ffffff] ring-white/10',
+      )}
+    >
+      {value}
+    </span>
   );
 }
 
@@ -96,56 +106,90 @@ export function SummaryCard({
   return (
     <Card className={cn('flex flex-col gap-4 p-4', className)}>
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">Game summary</h2>
-        <span className="text-xs text-muted">
+        <h2 className="shrink-0 text-base font-bold">Game summary</h2>
+        <span className="min-w-0 truncate text-xs text-muted">
           {partial && review ? `${reviewed} of ${totalPlies} moves so far` : engineLabel}
         </span>
       </div>
 
-      <div className="flex gap-2">
-        <AccuracyTile name={record.white.name} color="w" player={review?.white ?? null} />
-        <AccuracyTile name={record.black.name} color="b" player={review?.black ?? null} />
-      </div>
-
-      {review ? (
-        <div>
-          <table className="w-full text-sm">
-            <caption className="sr-only">Moves by classification</caption>
-            <thead>
-              <tr className="text-xs text-muted">
-                <th scope="col" className="pb-1 text-left font-medium">
-                  Move quality
-                </th>
-                <th scope="col" className="w-14 pb-1 text-right font-medium">
-                  White
-                </th>
-                <th scope="col" className="w-14 pb-1 text-right font-medium">
-                  Black
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((classification) => (
-                <tr key={classification} className="border-t border-line/60">
-                  <th scope="row" className="py-1.5 text-left font-normal">
-                    <span className="inline-flex items-center gap-2">
-                      <ClassificationIcon classification={classification} size={18} decorative />
-                      <span style={{ color: CLASSIFICATION_META[classification].colorVar }}>
-                        {CLASSIFICATION_META[classification].label}
+      <div>
+        {/* Side by side: label, White's count, the icon, Black's count. */}
+        <table className="w-full table-fixed border-collapse text-sm">
+          <caption className="sr-only">Accuracy and moves by classification</caption>
+          <colgroup>
+            <col />
+            <col className="w-[4.25rem] sm:w-24" />
+            <col className="w-9" />
+            <col className="w-[4.25rem] sm:w-24" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th
+                scope="col"
+                className="pb-2 text-left align-bottom text-xs font-semibold text-muted"
+              >
+                Players
+              </th>
+              <th scope="col" className="pb-2 font-normal">
+                <PlayerHead name={record.white.name} color="w" />
+              </th>
+              <td />
+              <th scope="col" className="pb-2 font-normal">
+                <PlayerHead name={record.black.name} color="b" />
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" className="py-1 text-left font-semibold text-muted">
+                Accuracy
+              </th>
+              <td className="py-1">
+                <AccuracyBox color="w" player={review?.white ?? null} />
+              </td>
+              <td />
+              <td className="py-1">
+                <AccuracyBox color="b" player={review?.black ?? null} />
+              </td>
+            </tr>
+          </tbody>
+          {review && (
+            <tbody className="border-t border-line">
+              {rows.map((classification, index) => {
+                const meta = CLASSIFICATION_META[classification];
+                const cell = index === 0 ? 'pt-2.5 pb-[3px]' : 'py-[3px]';
+                return (
+                  <tr key={classification}>
+                    <th scope="row" className={cn(cell, 'truncate text-left font-semibold')}>
+                      {meta.label}
+                    </th>
+                    <CountCell
+                      value={review.white.counts[classification]}
+                      color={meta.colorVar}
+                      className={cell}
+                    />
+                    <td className={cell}>
+                      <span className="flex justify-center">
+                        <ClassificationIcon classification={classification} size={20} decorative />
                       </span>
-                    </span>
-                  </th>
-                  <CountCell value={review.white.counts[classification]} />
-                  <CountCell value={review.black.counts[classification]} />
-                </tr>
-              ))}
+                    </td>
+                    <CountCell
+                      value={review.black.counts[classification]}
+                      color={meta.colorVar}
+                      className={cell}
+                    />
+                  </tr>
+                );
+              })}
             </tbody>
-          </table>
+          )}
+        </table>
+        {review && (
           <button
             type="button"
             onClick={() => setShowAll((value) => !value)}
             aria-expanded={showAll}
-            className="mt-1 inline-flex min-h-10 items-center gap-1 rounded-md pr-2 text-xs text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+            className="mt-1 inline-flex min-h-10 items-center gap-1 rounded-md pr-2 text-xs text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent lg:min-h-8"
           >
             {showAll ? (
               <ChevronUp aria-hidden="true" className="h-3.5 w-3.5" />
@@ -154,16 +198,41 @@ export function SummaryCard({
             )}
             {showAll ? 'Show fewer' : 'Show all classifications'}
           </button>
+        )}
+      </div>
+
+      {!review &&
+        (reviewFailed ? (
+          <p className="text-sm text-danger" role="alert">
+            The move ratings could not be calculated for this game. This is a bug in Kibitz: please
+            report it together with the link to this page.
+          </p>
+        ) : (
+          <p className="text-sm text-muted">
+            Accuracy and move ratings appear here as soon as the first moves are analysed.
+          </p>
+        ))}
+
+      {(atStart || canAnalyseDeeper) && (
+        <div className="flex flex-col gap-2">
+          {atStart && totalPlies > 0 && (
+            <Button variant="primary" size="xl" onClick={onStart} className="w-full">
+              <Play aria-hidden="true" className="h-5 w-5 fill-current" />
+              Start review
+            </Button>
+          )}
+          {canAnalyseDeeper && (
+            <Button
+              variant="secondary"
+              onClick={onAnalyseDeeper}
+              className="w-full"
+              title="Re-analyse this game at a greater depth"
+            >
+              <Telescope aria-hidden="true" className="h-4 w-4" />
+              Analyse deeper
+            </Button>
+          )}
         </div>
-      ) : reviewFailed ? (
-        <p className="text-sm text-danger" role="alert">
-          The move ratings could not be calculated for this game. This is a bug in Kibitz: please
-          report it together with the link to this page.
-        </p>
-      ) : (
-        <p className="text-sm text-muted">
-          Accuracy and move ratings appear here as soon as the first moves are analysed.
-        </p>
       )}
 
       {onLearn && learnCount > 0 && (
@@ -183,39 +252,28 @@ export function SummaryCard({
           </Button>
         </div>
       )}
-
-      {(atStart || canAnalyseDeeper) && (
-        <div className="flex flex-wrap gap-2">
-          {atStart && totalPlies > 0 && (
-            <Button variant="primary" onClick={onStart} className="flex-1">
-              <Play aria-hidden="true" className="h-4 w-4" />
-              Start review
-            </Button>
-          )}
-          {canAnalyseDeeper && (
-            <Button
-              variant="secondary"
-              onClick={onAnalyseDeeper}
-              className={atStart ? undefined : 'flex-1'}
-              title="Re-analyse this game at a greater depth"
-            >
-              <Telescope aria-hidden="true" className="h-4 w-4" />
-              Analyse deeper
-            </Button>
-          )}
-        </div>
-      )}
     </Card>
   );
 }
 
-function CountCell({ value }: { value: number }) {
+/** A player's count of one classification, in its colour (muted when zero). */
+function CountCell({
+  value,
+  color,
+  className,
+}: {
+  value: number;
+  color: string;
+  className?: string;
+}) {
   return (
     <td
       className={cn(
-        'tabular py-1.5 text-right font-semibold',
-        value === 0 && 'font-normal text-muted/60',
+        'tabular text-center text-base font-bold',
+        value === 0 && 'font-normal text-muted',
+        className,
       )}
+      style={value === 0 ? undefined : { color }}
     >
       {value}
     </td>

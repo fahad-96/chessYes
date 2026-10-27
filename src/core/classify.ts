@@ -4,7 +4,7 @@ import type { Classification, Color, SacrificeInfo, Square } from './types';
 export interface ClassifyInput {
   color: Color;
   uci: string;
-  /** Mover's win % before the move (engine's best line). */
+  /** Mover's win % before the move (engine's best line), calibrated scale (winPercent.ts). */
   winBefore: number;
   /** Mover's win % after the move played. */
   winAfter: number;
@@ -38,8 +38,23 @@ export interface ClassifyInput {
    * Undefined when the engine saw no forced mate.
    */
   mateBefore?: number;
-  /** The same for the position after the move; 0 when the move itself is checkmate. */
-  mateAfter?: number;
+  /**
+   * Material in pawn units the engine's best line wins for the mover (the 'missed' story's
+   * materialSwing, see tactics.describeLine). Only needed for errors that are not the
+   * engine's move; undefined when not computed.
+   */
+  bestLineGain?: number;
+  /**
+   * Material in pawn units the mover ends up with over the engine line after the move played
+   * (the refutation story's materialSwing, counted from the position before the move), so
+   * that material the move played wins too is not counted as missed. Undefined: 0.
+   */
+  playedLineGain?: number;
+  /**
+   * Win % the opponent gave away with their previous move, when that move was graded an
+   * error (Inaccuracy or worse); undefined otherwise or for the first move.
+   */
+  opponentGift?: number;
 }
 
 /**
@@ -48,8 +63,8 @@ export interface ClassifyInput {
  *  2. Forced    – legalMoveCount === 1.
  *  3. Base label from the win % lost (THRESHOLDS.loss): Best when the move is the
  *     engine's top move or loses nothing, then Excellent / Good / Inaccuracy / Mistake / Blunder.
- *     For any other move, a mate swing (THRESHOLDS.mate) can make the base label worse:
- *     allowing a forced mate, or letting the mover's own forced mate slip.
+ *     A forced mate counts as 100 % (0 % for the side being mated), so letting one slip or
+ *     walking into one costs win % like any other move.
  *  4. Brilliant – base is Best/Excellent, loss <= brilliant.maxLoss, a sacrifice of at least
  *     brilliant.minSacrifice, winAfter >= brilliant.minWinAfter, and the second-best move
  *     does not also keep >= brilliant.maxSecondBestWin.
@@ -58,8 +73,12 @@ export interface ClassifyInput {
  *     and the move is not obvious: not an answer to a check, not checkmate itself, not a simple
  *     recapture on the square the opponent just captured on, and not a capture that wins at
  *     least great.obviousCaptureGain outright.
- *  6. Missed Win – base is Inaccuracy/Mistake/Blunder, winBefore >= missedWin.minWinBefore,
- *     missedWin.minWinAfter <= winAfter < missedWin.maxWinAfter, loss >= missedWin.minLoss.
+ *  6. Miss ('missedWin') – base is Inaccuracy/Mistake/Blunder, winAfter >= miss.minWinAfter,
+ *     and there was a chance: the best move starts a forced mate (mateBefore > 0), or the best
+ *     line wins at least miss.minMaterialWon more than the line after the move played
+ *     (bestLineGain - max(0, playedLineGain)), or the opponent's previous error
+ *     gave away at least miss.minGift (opponentGift) and this move gives back at least
+ *     miss.minShareGivenBack of it.
  */
 export function classifyMove(input: ClassifyInput): Classification {
   if (input.inBook) return 'book';
@@ -67,13 +86,11 @@ export function classifyMove(input: ClassifyInput): Classification {
 
   const loss = Math.max(0, input.winBefore - input.winAfter);
   const isEngineBest = input.bestUci !== undefined && input.uci === input.bestUci;
-  const lossLabel = baseClassification(loss, isEngineBest);
-  const mateLabel = isEngineBest ? null : mateSwingClassification(input);
-  const base = mateLabel ? worseOf(lossLabel, mateLabel) : lossLabel;
+  const base = baseClassification(loss, isEngineBest);
 
   if (isBrilliant(input, base, loss)) return 'brilliant';
   if (isGreat(input, base, isEngineBest, loss)) return 'great';
-  if (isMissedWin(input, base, loss)) return 'missedWin';
+  if (isMiss(input, base, loss)) return 'missedWin';
   return base;
 }
 
@@ -86,53 +103,6 @@ export function baseClassification(loss: number, isEngineBest: boolean): Classif
   if (loss <= inaccuracy) return 'inaccuracy';
   if (loss <= mistake) return 'mistake';
   return 'blunder';
-}
-
-/**
- * The label a mate swing deserves at least (part of rule 3), or null when there is none:
- * - allowing a forced mate the mover was not already facing, graded by how bad winBefore was;
- * - letting the mover's own forced mate slip (no mate and no checkmate after the move),
- *   graded by how much of the advantage winAfter still keeps.
- * Exported for tests and docs.
- */
-export function mateSwingClassification(
-  input: Pick<ClassifyInput, 'winBefore' | 'winAfter' | 'mateBefore' | 'mateAfter'>,
-): Classification | null {
-  const rule = THRESHOLDS.mate;
-  const { winBefore, winAfter, mateBefore, mateAfter } = input;
-  const matedBefore = mateBefore !== undefined && mateBefore < 0;
-  const matingBefore = mateBefore !== undefined && mateBefore > 0;
-  const matedAfter = mateAfter !== undefined && mateAfter < 0;
-  const matingAfter = mateAfter !== undefined && mateAfter >= 0;
-
-  let label: Classification | null = null;
-  if (matedAfter && !matedBefore) {
-    if (winBefore > rule.allowedBlunderAbove) label = 'blunder';
-    else if (winBefore > rule.allowedMistakeAbove) label = 'mistake';
-    else label = 'inaccuracy';
-  }
-  if (matingBefore && !matingAfter) {
-    let lost: Classification = 'blunder';
-    if (winAfter >= rule.lostInaccuracyFrom) lost = 'inaccuracy';
-    else if (winAfter >= rule.lostMistakeFrom) lost = 'mistake';
-    label = label ? worseOf(label, lost) : lost;
-  }
-  return label;
-}
-
-/** Base labels from least to most severe. */
-const SEVERITY: readonly Classification[] = [
-  'best',
-  'excellent',
-  'good',
-  'inaccuracy',
-  'mistake',
-  'blunder',
-];
-
-/** The more severe of two base labels. */
-function worseOf(a: Classification, b: Classification): Classification {
-  return SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b;
 }
 
 /** Rule 4: a sound sacrifice that was also necessary. */
@@ -184,14 +154,21 @@ function isObvious(input: ClassifyInput): boolean {
   return isRecapture || (input.captureGain ?? 0) >= THRESHOLDS.great.obviousCaptureGain;
 }
 
-/** Rule 6: the player had a winning position and let it slip to roughly equal. */
-function isMissedWin(input: ClassifyInput, base: Classification, loss: number): boolean {
-  const rule = THRESHOLDS.missedWin;
+/**
+ * Rule 6: an error made when there was a real chance (a forced mate, material to win, or a
+ * fresh mistake by the opponent), which lets that chance slip without throwing the
+ * position away.
+ */
+function isMiss(input: ClassifyInput, base: Classification, loss: number): boolean {
+  const rule = THRESHOLDS.miss;
   if (base !== 'inaccuracy' && base !== 'mistake' && base !== 'blunder') return false;
-  return (
-    input.winBefore >= rule.minWinBefore &&
-    input.winAfter >= rule.minWinAfter &&
-    input.winAfter < rule.maxWinAfter &&
-    loss >= rule.minLoss
-  );
+  if (input.winAfter < rule.minWinAfter) return false;
+  const hadMate = input.mateBefore !== undefined && input.mateBefore > 0;
+  // Material is only missed when the move played does not win it (or most of it) as well:
+  // taking with the other piece, or winning the same piece a move later, misses nothing.
+  const materialMissed = (input.bestLineGain ?? 0) - Math.max(0, input.playedLineGain ?? 0);
+  const couldWinMaterial = materialMissed >= rule.minMaterialWon;
+  const gift = input.opponentGift ?? 0;
+  const gaveBackGift = gift >= rule.minGift && loss >= gift * rule.minShareGivenBack;
+  return hadMate || couldWinMaterial || gaveBackGift;
 }

@@ -32,7 +32,7 @@
 }
 
 .kb-board cg-board square.last-move {
-  background-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background-color: var(--board-highlight);
 }
 
 .kb-board cg-board square.check {

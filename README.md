@@ -10,8 +10,8 @@ Stockfish runs in your browser, so there is no account, no paywall and no server
 
 - **Game lookup** from Chess.com (Published-Data API) and Lichess, or paste any PGN
 - **Full-game analysis** with Stockfish 19 (WebAssembly, in a Web Worker) on your device. A quick first pass shows a complete review within seconds, the full pass then replaces it move by move, and a deeper double-check re-examines the key moments. Progress is saved, so a closed tab resumes where it stopped
-- **Move classifications:** Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Missed Win
-- **Accuracy** for both players (the open Lichess formula)
+- **Move classifications:** Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, Miss
+- **Accuracy** for both players, from Kibitz's open model calibrated against published accuracy figures from Chess.com game reviews (close to them, not identical), or on the Lichess scale (Settings → Accuracy scale)
 - **Eval bar and eval graph**: click the graph to jump to any move
 - **"Show why" with tactics**: a blunder shows the reply that punishes it, a brilliant or great move the idea behind it, played out on the board with arrows. Kibitz spots forks, pins, skewers, discovered attacks and checks, hanging pieces, promotions and back-rank mates: _"You sacrifice the rook on h7: after Kxh7, Nf6+ forks the king and queen and wins the queen."_ Your opponent's moves are explained to you: _"You reply Rxg7+, forking their king and bishop, and win the bishop."_
 - **Voice coach**: hear each move's verdict and the reason as you step through the game, or let it narrate the key moments while the board plays them. It uses your device's voices; an optional natural voice (Kokoro-82M) runs on your GPU
@@ -25,7 +25,7 @@ Stockfish runs in your browser, so there is no account, no paywall and no server
 
 ## How moves are classified
 
-Each move is judged by how much it lowers your chance of winning (win %), computed from Stockfish's evaluation before and after the move. Losing 2 points of win % or less is Excellent; losing more than 20 is a Blunder. Brilliant (a sound sacrifice), Great (the only good move) and Missed Win have their own documented rules.
+Each move is judged by how much it lowers your chance of winning (win %), computed from Stockfish's evaluation before and after the move. Losing 2 points of win % or less is Excellent; losing more than 20 is a Blunder. Brilliant (a sound sacrifice), Great (the only good move) and Miss (a real chance let slip) have their own documented rules.
 
 The explanations are rule-based too: no AI writes them. Kibitz replays the engine's line, finds the tactic in it and tells it in a sentence or two.
 
@@ -65,7 +65,7 @@ The site is fully static: no functions, no environment variables, no server cost
 | Board       | chessground                           | Fast, touch-friendly, arrows built in                       |
 | Engine      | Stockfish 19 lite (WASM)              | Runs on the user's device; no special server headers        |
 | Voice       | Web Speech API; Kokoro-82M (optional) | System voices need no download; the natural voice is opt-in |
-| Styling     | Tailwind CSS v4                       | Design tokens, light and dark themes                        |
+| Styling     | Tailwind CSS v4                       | Classic (default), dark and light themes from design tokens |
 | Storage     | IndexedDB (idb-keyval)                | Analyses, reviewed games and puzzle progress, offline       |
 | Offline     | Hand-written service worker           | Every caching rule readable in one file                     |
 | Tests       | Vitest                                | Chess logic is pure TypeScript and fully unit-tested        |
@@ -91,6 +91,6 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Kibitz is free software, licensed under the [GNU GPL v3.0 or later](LICENSE).
 
-It bundles [Stockfish](https://github.com/official-stockfish/Stockfish) via [stockfish.js](https://github.com/nmrugg/stockfish.js) (GPL-3.0) and uses [chessground](https://github.com/lichess-org/chessground) (GPL-3.0), [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) and the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0). The win % and accuracy formulas follow [Lichess](https://github.com/lichess-org/lila).
+It bundles [Stockfish](https://github.com/official-stockfish/Stockfish) via [stockfish.js](https://github.com/nmrugg/stockfish.js) (GPL-3.0) and uses [chessground](https://github.com/lichess-org/chessground) (GPL-3.0), [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) and the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset (CC0). The win % curve and the alternative accuracy scale follow [Lichess](https://github.com/lichess-org/lila).
 
 The optional natural voice uses the [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) model and [kokoro-js](https://github.com/hexgrad/kokoro) (Apache-2.0), [Transformers.js](https://github.com/huggingface/transformers.js) (Apache-2.0), [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT) and [phonemizer.js](https://github.com/xenova/phonemizer.js) (Apache-2.0) with [eSpeak NG](https://github.com/espeak-ng/espeak-ng) (GPL-3.0-or-later). The model weights are downloaded from the Hugging Face Hub only when a user turns the natural voice on.

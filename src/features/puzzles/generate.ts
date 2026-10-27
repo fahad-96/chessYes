@@ -10,7 +10,7 @@ import type { LibraryEntry, LibraryMove, Perspective } from '@/library/library';
  *
  * A move of the player (the entry's perspective) becomes a puzzle when:
  *
- * 1. It was a Mistake, Blunder or Missed Win. Inaccuracies are left out: a small slip
+ * 1. It was a Mistake, Blunder or Miss. Inaccuracies are left out: a small slip
  *    rarely has one answer you can "find", and the prompt calls the game move a mistake.
  * 2. The engine's best move is known and differs from the move played.
  * 3. The best move is clearly the one to find: there is no second line to compare with
@@ -26,12 +26,16 @@ import type { LibraryEntry, LibraryMove, Perspective } from '@/library/library';
  * Positions that come up in several games become one puzzle (see generatePuzzles).
  */
 
-/** Every tunable number behind puzzle selection. */
+/**
+ * Every tunable number behind puzzle selection. Win % values are on the calibrated scale of
+ * the review (core/winPercent.ts), about half as steep as the Lichess scale these rules were
+ * first written for (gap 10, at least 30 %): the numbers below keep the same positions.
+ */
 export const PUZZLE_RULES = {
   /** Win % points between the best and second-best move for the best move to be "the" move. */
-  minGapToSecond: 10,
+  minGapToSecond: 6,
   /** The player's win % with best play must be at least this (below is a lost position). */
-  minWinBefore: 30,
+  minWinBefore: 39,
   /** Pawn units the best line must win for the "material" theme. */
   minMaterialGain: 2,
   /** "defence" when the player's win % with best play is below this. */

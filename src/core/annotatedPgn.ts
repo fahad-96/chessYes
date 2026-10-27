@@ -31,7 +31,7 @@ const ERROR_LABELS: Partial<Record<Classification, string>> = {
   inaccuracy: 'Inaccuracy',
   mistake: 'Mistake',
   blunder: 'Blunder',
-  missedWin: 'Missed win',
+  missedWin: 'Miss',
 };
 
 /** Labels whose story (MoveReview.why) is written next to the move. */

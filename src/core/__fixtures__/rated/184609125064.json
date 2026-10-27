@@ -1,0 +1,48 @@
+{
+  "source": "https://www.chess.com/game/live/184609125064",
+  "timeClass": "blitz",
+  "ratingBand": "1800-2200",
+  "ratings": {
+    "white": 3412,
+    "black": 966
+  },
+  "published": {
+    "white": 96.66,
+    "black": 66.1
+  },
+  "moves": "1. Nf3 d5 2. c4 dxc4 3. e4 Nc6 4. Bxc4 h6 5. d4 e6 6. O-O Nge7 7. Nc3 g6 8. d5 exd5 9. exd5 Nb4 10. Qd4 Rg8 11. Bb5+ c6 12. Qxb4 cxb5 13. Re1 a5 14. Qxb5+ Bd7 15. Ne4 Nf5 16. Nf6# 1-0",
+  "positions": [
+    "cp 26 e2e4 e7e5 g1f3 b8c6 d2d4 e5d4 f3d4 g8f6 d4c6 d7c6 d1d8 e8d8 | cp 25 d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 f8e7 e2e3 e8g8 g1f3 h7h6",
+    "cp 19 d7d5 d2d4 e7e6 c2c4 g8f6 c1g5 d5c4 e2e4 b7b5 b1c3 c7c6 e4e5 | cp 20 g8f6 d2d4 d7d5 c2c4 e7e6 c1g5 d5c4 e2e4 b7b5 a2a4 c7c6 a4b5",
+    "cp 16 d2d4 e7e6 c2c4 g8f6 c4d5 e6d5 b1c3 f8b4 c1g5 e8g8 e2e3 c8f5 | cp 12 e2e3 g8f6 c2c4 e7e6 d2d4 c7c5 b1c3 d5c4 f1c4 a7a6 e1g1 b7b5",
+    "cp -11 d5d4 e2e3 c7c5 b2b4 d4e3 f2e3 c5b4 d2d4 e7e6 f1d3 g8f6 b1d2 | cp 17 e7e6 d2d4 g8f6 b1c3 c7c5 c1g5 d5c4 e2e3 c5d4 f3d4 e6e5 d4f3",
+    "cp 24 e2e3 e7e6 f1c4 g8f6 d2d4 c7c5 e1g1 a7a6 d4c5 d8d1 f1d1 f8c5 | cp 18 e2e4 c8e6 d1c2 b8c6 f1c4 e6c4 c2c4 e7e5 e1g1 d8d7 d2d3 f8d6",
+    "cp 16 c8e6 d1c2 b8c6 f1c4 e6c4 c2c4 e7e5 e1g1 d8d7 d2d3 e8c8 f1d1 | cp 23 c7c5 f1c4 b8c6 e1g1 e7e6 b1c3 a7a6 c4b3 g8f6 e4e5 f6d7 f1e1",
+    "cp 46 f1c4 e7e5 b1c3 f8d6 d2d4 c8g4 c4b5 g4f3 g2f3 e5d4 d1d4 d8f6 | cp 18 h2h3 e7e5 f1c4 f8c5 b1c3 d8d6 e1g1 g8e7 d2d3 e8g8",
+    "cp 60 e7e5 b1c3 f8c5 b2b4 c5b4 d1b3 c8e6 c4e6 f7e6 b3e6 d8e7 e6c4 | cp 97 a7a6 d2d4 c8g4 d4d5 c6e5 c4e2 g4f3 g2f3 e7e6 f3f4 e5g6 b1c3",
+    "cp 172 d2d4 c8g4 d1b3 e7e6 b3b7 f8b4 c1d2 b4d2 b1d2 g8e7 c4b5 e8g8 | cp 113 b1c3 e7e5 e1g1 f8c5 b2b4 c5b4 d1b3 d8d7 f3e5 c6e5 b3b4 e5c4",
+    "cp 172 c8g4 d1b3 e7e6 b3b7 f8b4 c1d2 b4d2 b1d2 g8e7 c4b5 e8g8 b5c6 | cp 192 g7g5 d1b3 e7e6 e1g1 f8g7 d4d5 e6d5 e4d5 c6a5 b3a4 c7c6 d5c6",
+    "cp 181 b1c3 f8b4 e1g1 g8f6 d1c2 e8g8 f1d1 a7a6 a2a3 b4c3 b2c3 b7b5 | cp 180 e1g1 g8f6 b1c3 f8b4 d1c2 e8g8 f1d1 c6e7 a2a3 b4c3 b2c3 e7g6",
+    "cp 185 g8f6 b1c3 f8b4 d4d5 b4c3 b2c3 c6e7 c1a3 e6d5 e4d5 e8g8 f1e1 | cp 211 a7a6 d4d5 b7b5 c4b3 c6a5 d5e6 f7e6 d1c2 a5b3 c2b3 d8f6 a2a4",
+    "cp 194 d4d5 e6d5 e4d5 c6a5 d1a4 c7c6 d5d6 b7b5 c4f7 e8f7 d6e7 f8e7 | cp 185 b1c3 e7g6 d1e2 e6e5 d4e5 g6e5 f3e5 c6e5 c4b3 d8d3 e2d3 e5d3",
+    "cp 162 e7g6 d4d5 c6e5 c4b3 e6d5 f3e5 g6e5 d1d4 e5c6 b3a4 c8d7 a4c6 | cp 241 c8d7 d4d5 c6a5 d5e6 f7e6 c4d3 a5c6 c1e3 g7g5 d1b3 f8g7 a1d1",
+    "cp 547 d4d5 c6b8 c1f4 f8g7 c3b5 b8a6 d5d6 e7c6 d6c7 d8d1 f1d1 c8d7 | cp 331 f1e1 f8g7 d4d5 c6e5 f3e5 g7e5 d1b3 c8d7 d5e6 d7e6 c4e6 f7e6",
+    "cp 517 c6b8 c1f4 f8g7 c3b5 b8a6 d5d6 g6g5 d6c7 d8d1 f1d1 e8g8 f4d6 | cp 562 e6d5 e4d5 c6b8 d1d4 h8h7 f1e1 f8g7 d4e3 e8f8 b2b3 e7f5 c1a3",
+    "cp 568 e4d5 c6b8 d1d4 h8h7 b2b3 f8g7 d4e3 g7c3 e3c3 e7d5 c3e5 e8f8 | cp 227 c3d5 f8g7 c1f4 e8g8 d5c7 a8b8 d1a4 c8g4 a1d1 d8c8 f4d6 g4f3",
+    "cp 574 f8g7 d5c6 e8g8 d1a4 e7c6 c1e3 c8d7 a4c2 d7f5 c2c1 f5g4 c4e2 | cp 578 c6b8 d1d4 h8h7 f1e1 f8g7 d4f4 g6g5 f4d2 e8f8 b2b3 f8g8",
+    "cp 711 d1a4 c7c6 a4b4 e7d5 f1e1 c8e6 b4b7 d8c8 b7b3 a8b8 e1e6 f7e6 | cp 663 f1e1 f8g7 d1a4 c7c6 a4b4 a7a5 b4a3 e8g8 a3e7 d8e7 e1e7 c6d5",
+    "cp 671 h8h7 c4b5 c7c6 d4b4 c6b5 f1e1 a7a5 b4b5 c8d7 b5e2 d8b6 f3e5 | cp 683 f7f6 c4b3 a7a5 a2a3 b4a6 d4f6 h8h7 f1e1 d8d6 c3e4 d6f6 e4f6",
+    "cp 718 c4b5 c7c6 d4b4 c6b5 f1e1 a7a6 c3e4 f8g7 d5d6 c8e6 d6e7 d8e7 | cp 587 d4d1 a7a5 a2a3 b4a6 c1f4 g6g5 f4g3 f8g7 f1e1 e8f8",
+    "cp 718 c7c6 d4b4 c6b5 f1e1 a7a6 c3e4 f8g7 d5d6 c8e6 d6e7 d8e7 b4a5 | cp 815 b4c6 d4a4 a7a6 d5c6 a6b5 a4a8 b7c6 a8a7 c8e6 f1e1 d8c8 a7e3",
+    "cp 718 d4b4 c6b5 f1e1 a7a6 c3e4 f8g7 d5d6 c8e6 d6e7 d8e7 b4a5 f7f5 | cp 471 d5c6 b4c6 d4a4 g6g5 c3e4 f8g7 f1d1 d8c7 c1e3 e8f8 e3c5 c8e6",
+    "cp 686 c6b5 f1e1 a7a6 c3e4 f8g7 d5d6 c8e6 d6e7 d8e7 e4d6 e8f8 c1f4 | cp 717 a7a5 b4c4 c6b5 c3b5 e7d5 c4d5 d8d5 b5c7 e8d7 c7d5 d7c6 f1d1",
+    "cp 717 f1e1 a7a5 b4c5 c8g4 f3e5 a8c8 c5b5 g4d7 b5b7 f7f6 e5d7 d8d7 | cp 581 b4b5 d8d7 b5b3 f8g7 f1e1 e8f8 c1f4 g7c3 b3c3 g6g5 f4e5 g8g6",
+    "cp 723 a7a5 b4c5 c8g4 d5d6 g4f3 d6e7 d8e7 e1e7 f8e7 c5c7 f3c6 c1f4 | cp 734 f8g7 d5d6 c8e6 d6e7 d8e7 b4b5 e7d7 b5a5 b7b6 a5a6 e8f8 a6a3",
+    "cp 733 b4c5 f7f6 d5d6 a8a6 c3b5 e8f7 c5c4 f7g7 d6e7 f8e7 c4f1 e7b4 | cp 728 b4b5 c8d7 b5e2 d7g4 c1f4 g6g5 f4g3 g8g6 e2b5 g4d7 b5d3 d8b6",
+    "cp 721 c8d7 b5e2 d7g4 c1f4 g6g5 f4e5 g8g6 a1d1 f7f6 e5g3 e8f7 d5d6 | cp 746 d8d7 b5d3 a8a6 c1f4 d7f5 d3c4 f8g7 c3b5",
+    "cp 704 b5d3 d7f5 d3b5 d8d7 d5d6 d7b5 c3b5 a8d8 d6e7 f8e7 c1h6 | cp 699 b5e2 g6g5 d5d6 g8g6 d6e7 d8e7 c1e3 f8g7 c3d5 e7e4 d5c7 e8f8",
+    "cp 646 f8g7 b5b3 e8f8 c1f4 g8h8 f4e5 d7f5 e4f6 e7d5 f6d5 g7e5 f3e5 | cp 767 d8c7 e4f6 e8d8 b5d3 e7f5 f6g8 f8c5 g8f6 c5f2 g1f2 a8a6 f2f1",
+    "mate 1 e4f6 | mate 1 e4d6",
+    "checkmate"
+  ]
+}

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f1419" />
+    <meta name="theme-color" content="#22201e" />
     <meta name="color-scheme" content="dark light" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
@@ -14,15 +14,29 @@
     />
     <title>Kibitz · Free chess game review</title>
     <script>
-      // Apply the saved theme before the app loads so a forced light or dark theme never
-      // flashes. Mirrors useDocumentTheme in src/app/Layout.tsx (store: src/state/settings.ts).
+      // Apply the saved theme before the app loads so the page never flashes in the wrong
+      // colours. Mirrors the defaults and migrateSettings in src/state/settings.ts and
+      // useDocumentTheme in src/app/Layout.tsx.
       try {
-        const saved = JSON.parse(localStorage.getItem('kibitz-settings') || '{}').state || {};
+        const saved = JSON.parse(localStorage.getItem('kibitz-settings') || 'null');
+        const state = (saved && saved.state) || {};
+        // Saved before version 2: the old defaults (system theme, slate board) became classic.
+        const legacy = !!saved && (saved.version || 0) < 2;
+        let theme = state.theme || (legacy ? 'system' : 'classic');
+        let board = state.boardTheme || (legacy ? 'slate' : 'green');
+        if (legacy && theme === 'system' && board === 'slate') {
+          theme = 'classic';
+          board = 'green';
+        }
         const root = document.documentElement;
-        if (saved.theme === 'light' || saved.theme === 'dark') root.dataset.theme = saved.theme;
-        if (typeof saved.boardTheme === 'string') root.dataset.board = saved.boardTheme;
+        if (theme === 'classic' || theme === 'light' || theme === 'dark') {
+          root.dataset.theme = theme;
+        }
+        root.dataset.board = board;
       } catch {
-        // Storage blocked or unreadable: the app applies the theme once it starts.
+        // Storage blocked or unreadable: show the default theme; the app takes over once it starts.
+        document.documentElement.dataset.theme = 'classic';
+        document.documentElement.dataset.board = 'green';
       }
     </script>
   </head>

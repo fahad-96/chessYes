@@ -14,8 +14,8 @@ describe('addressOpponent', () => {
       'You reply Rxg7+, forking their king and bishop, and win the bishop and a pawn.',
     ],
     [
-      'Missed win. Your opponent replies Rxg7+ and wins your pawn on g7. Best was g5, which keeps your winning chances.',
-      'Missed win. You reply Rxg7+ and win their pawn on g7. Best was g5, which keeps their winning chances.',
+      'Miss. Your opponent replies Rxg7+ and wins your pawn on g7. Best was g5, which keeps your winning chances.',
+      'Miss. You reply Rxg7+ and win their pawn on g7. Best was g5, which keeps their winning chances.',
     ],
     ['Your opponent replies e8=Q and makes a new queen.', 'You reply e8=Q and make a new queen.'],
     [
@@ -111,8 +111,8 @@ describe('addressOpponent', () => {
       'Inaccuracy. You are still slightly better, and this makes it harder for them to defend.',
     ],
     [
-      'Missed win. You let a winning chance slip, and now the position is equal.',
-      'Missed win. Your opponent let a winning chance slip, and now the position is equal.',
+      'Miss. You let the chance slip, and now the position is equal.',
+      'Miss. Your opponent let the chance slip, and now the position is equal.',
     ],
     [
       'This stalemates your opponent, so the game is a draw.',

@@ -1,13 +1,16 @@
 @import 'tailwindcss';
 
 /*
- * Design tokens. Colours are CSS variables so light/dark themes swap in one
- * place; Tailwind utilities (bg-surface, text-muted, border-line, ...) map to them.
- * Theme: [data-theme="light"|"dark"] on <html>, falling back to the OS setting.
- * The light theme darkens every colour used for text (classifications, accent,
- * success, danger) so it reaches 4.5:1 on white and on the light surfaces.
+ * Design tokens. Colours are CSS variables so themes swap in one place; Tailwind
+ * utilities (bg-surface, text-muted, border-line, ...) map to them.
+ * Theme: data-theme="classic"|"dark"|"light" on <html>; without it (the "system"
+ * setting) the OS decides between dark and light. The theme selectors also match
+ * nested elements, so a settings preview can show a theme other than the page's.
+ * Every colour used for text (classifications, accent, success, danger, muted)
+ * reaches 4.5:1 on its theme's page background and card surface.
  */
-:root {
+:root,
+[data-theme='dark'] {
   color-scheme: dark;
   --bg: #0f1419;
   --surface: #161c23;
@@ -19,12 +22,20 @@
   --accent: #f2b544;
   --accent-strong: #ffcb66;
   --accent-fg: #1a1406;
+  /* Bottom edge of the raised primary buttons, and the text shadow on them. */
+  --accent-edge: #b07a1c;
+  --accent-fg-shadow: transparent;
+  /*
+   * Face of primary buttons with normal-size labels: accent-fg on it reaches 4.5:1.
+   * The big call to action (Button size xl, large bold text) uses the accent itself.
+   */
+  --button: var(--accent);
+  --button-strong: var(--accent-strong);
+  --button-edge: var(--accent-edge);
   --danger: #f2555a;
   --success: #3fb950;
-
-  /* Board squares (default "slate" theme). */
-  --board-light: #e3e8ee;
-  --board-dark: #8fa3b8;
+  /* App header bar (also the browser UI colour, see Layout). */
+  --chrome: var(--bg);
 
   /* Eval bar / graph. */
   --eval-white: #eef1f4;
@@ -44,8 +55,12 @@
   --c-missedWin: #d16bd8;
 }
 
+/*
+ * The light theme darkens every colour used for text so it reaches 4.5:1 on white
+ * and on the light surfaces.
+ */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
+  :root:not([data-theme]) {
     color-scheme: light;
     --bg: #f5f6f8;
     --surface: #ffffff;
@@ -57,6 +72,8 @@
     --accent: #8a5c00;
     --accent-strong: #704a00;
     --accent-fg: #ffffff;
+    --accent-edge: #573a00;
+    --accent-fg-shadow: rgb(0 0 0 / 0.2);
     --danger: #b8232a;
     --success: #17732f;
     --eval-black: #3a434d;
@@ -74,7 +91,7 @@
   }
 }
 
-:root[data-theme='light'] {
+[data-theme='light'] {
   color-scheme: light;
   --bg: #f5f6f8;
   --surface: #ffffff;
@@ -86,8 +103,15 @@
   --accent: #8a5c00;
   --accent-strong: #704a00;
   --accent-fg: #ffffff;
+  --accent-edge: #573a00;
+  --accent-fg-shadow: rgb(0 0 0 / 0.2);
+  --button: var(--accent);
+  --button-strong: var(--accent-strong);
+  --button-edge: var(--accent-edge);
   --danger: #b8232a;
   --success: #17732f;
+  --chrome: var(--bg);
+  --eval-white: #eef1f4;
   --eval-black: #3a434d;
   --c-brilliant: #0a6b7d;
   --c-great: #2f5fc4;
@@ -102,7 +126,66 @@
   --c-missedWin: #9c2fa3;
 }
 
-/* Board themes (Settings → Board). */
+/*
+ * Classic (the default): warm charcoal with slightly darker panels, a bright green
+ * accent and heavier type, the look of a traditional chess-site game review.
+ * The bright green is 4.6:1 on the page as text, but white on it is only 3:1: enough
+ * for the large bold label of the big call to action, so the other primary buttons
+ * use a deeper green (4.5:1 with white).
+ */
+[data-theme='classic'] {
+  color-scheme: dark;
+  --bg: #2d2b28;
+  --surface: #242220;
+  --surface-2: #353330;
+  --surface-3: #423f3b;
+  --line: #3d3a36;
+  --text: #f7f6f4;
+  --muted: #aaa59e;
+  --accent: #6aa23c;
+  --accent-strong: #5a8f32;
+  --accent-fg: #ffffff;
+  --accent-edge: #42702a;
+  --accent-fg-shadow: rgb(0 0 0 / 0.3);
+  --button: #468528;
+  --button-strong: #3e7b23;
+  --button-edge: #2f5c1c;
+  --danger: #f3706e;
+  --success: #5cc063;
+  --chrome: #22201e;
+  --eval-white: #f2f1ee;
+  --eval-black: #3b3835;
+  --c-brilliant: #2fc6c9;
+  --c-great: #78a3ec;
+  --c-best: #5cc063;
+  --c-excellent: #86c56f;
+  --c-good: #a9bb52;
+  --c-book: #bf9a74;
+  --c-forced: #a29d96;
+  --c-inaccuracy: #e8b730;
+  --c-mistake: #f0883e;
+  --c-blunder: #f3706e;
+  --c-missedWin: #db7ae0;
+  /* Bolder type throughout: medium reads as semibold, semibold as bold. */
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+  /* Squarer panels and buttons. */
+  --radius-2xl: 0.625rem;
+  --radius-xl: 0.5rem;
+}
+
+/* Board themes (Settings → Board). Default: slate. */
+:root {
+  --board-light: #e3e8ee;
+  --board-dark: #8fa3b8;
+  /* Last move played. */
+  --board-highlight: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+[data-board='green'] {
+  --board-light: #e9ebcd;
+  --board-dark: #74945a;
+  --board-highlight: rgb(240 232 84 / 0.55);
+}
 [data-board='walnut'] {
   --board-light: #ecd9b9;
   --board-dark: #b08862;
@@ -127,6 +210,10 @@
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-accent-fg: var(--accent-fg);
+  --color-accent-edge: var(--accent-edge);
+  --color-button: var(--button);
+  --color-button-strong: var(--button-strong);
+  --color-chrome: var(--chrome);
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-c-brilliant: var(--c-brilliant);
@@ -170,6 +257,28 @@ main[tabindex='-1']:focus-visible {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Raised button (Button's primary look): a darker bottom edge, --edge tall, that
+ * presses in while the button is held. The text sits above the edge. kb-raised-hero
+ * is the big call to action on the bright accent, with that colour's edge.
+ */
+@layer components {
+  .kb-raised {
+    --raised-edge: var(--button-edge);
+    box-shadow: inset 0 calc(-1 * var(--edge, 3px)) 0 0 var(--raised-edge);
+    padding-bottom: var(--edge, 3px);
+    text-shadow: 0 1px 0 var(--accent-fg-shadow);
+  }
+  .kb-raised-hero {
+    --raised-edge: var(--accent-edge);
+  }
+  .kb-raised:active {
+    box-shadow: inset 0 -1px 0 0 var(--raised-edge);
+    padding-top: calc(var(--edge, 3px) - 1px);
+    padding-bottom: 1px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

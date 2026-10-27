@@ -97,14 +97,20 @@ export function describeAdvantage(whiteWinPercent: number): string {
 
 type Level = 'winning' | 'clearly better' | 'slightly better' | 'equal';
 
+/**
+ * Where each standing starts, as a win % on the calibrated scale (winPercent.ts): winning
+ * from about +4.7, clearly better from about +1.7, slightly better from about +0.6.
+ */
+const STANDING = { winning: 72, clearlyBetter: 58, slightlyBetter: 53 } as const;
+
 /** The describeAdvantage buckets; `side` is null when the position is equal. */
 function advantage(whiteWin: number): { side: Color | null; level: Level } {
-  if (whiteWin >= 85) return { side: 'w', level: 'winning' };
-  if (whiteWin >= 65) return { side: 'w', level: 'clearly better' };
-  if (whiteWin >= 55) return { side: 'w', level: 'slightly better' };
-  if (whiteWin > 45) return { side: null, level: 'equal' };
-  if (whiteWin > 35) return { side: 'b', level: 'slightly better' };
-  if (whiteWin > 15) return { side: 'b', level: 'clearly better' };
+  if (whiteWin >= STANDING.winning) return { side: 'w', level: 'winning' };
+  if (whiteWin >= STANDING.clearlyBetter) return { side: 'w', level: 'clearly better' };
+  if (whiteWin >= STANDING.slightlyBetter) return { side: 'w', level: 'slightly better' };
+  if (whiteWin > 100 - STANDING.slightlyBetter) return { side: null, level: 'equal' };
+  if (whiteWin > 100 - STANDING.clearlyBetter) return { side: 'b', level: 'slightly better' };
+  if (whiteWin > 100 - STANDING.winning) return { side: 'b', level: 'clearly better' };
   return { side: 'b', level: 'winning' };
 }
 
@@ -154,7 +160,7 @@ const ERROR_LABELS: Partial<Record<Classification, string>> = {
   inaccuracy: 'Inaccuracy.',
   mistake: 'Mistake.',
   blunder: 'Blunder.',
-  missedWin: 'Missed win.',
+  missedWin: 'Miss.',
 };
 
 function explainBrilliant(input: ExplainInput): string {
@@ -186,11 +192,11 @@ function describeSacrifice({ piece, square, material }: SacrificeInfo, uci: stri
 
 function explainGreat(input: ExplainInput): string {
   const keeps =
-    input.winAfter >= 85
+    input.winAfter >= STANDING.winning
       ? 'keeps you winning'
-      : input.winAfter >= 55
+      : input.winAfter >= STANDING.slightlyBetter
         ? 'keeps your advantage'
-        : input.winAfter > 45
+        : input.winAfter > 100 - STANDING.slightlyBetter
           ? 'keeps the balance'
           : 'keeps you in the game';
   if (ideaPays(input.why)) {
@@ -419,7 +425,12 @@ function describeLoss(input: ExplainInput, loss: Loss, played: SettledLine): str
 function describeSwing(input: ExplainInput): string {
   const { winBefore, winAfter } = input;
   if (input.classification === 'missedWin') {
-    return `You let a winning chance slip, and now ${standing(winAfter, 'present', { only: true })}.`;
+    // A Miss can leave the mover well ahead (a mate let go for +10): "and now you are
+    // winning" would read as praise.
+    if (standingRank(winAfter) >= 2) {
+      return `You let the chance slip, though you are still ${advantage(winAfter).level}.`;
+    }
+    return `You let the chance slip, and now ${standing(winAfter, 'present', { only: true })}.`;
   }
   const before = standingRank(winBefore);
   const after = standingRank(winAfter);
@@ -451,12 +462,11 @@ function adviseBest(input: ExplainInput, best: SuggestedLine): string {
 
   let why: string;
   if (mate) why = mate === 1 ? ', which is checkmate' : `, with mate in ${mate}`;
-  else if (input.classification === 'missedWin') why = ', which keeps your winning chances';
   else if (gain) why = `, which wins ${gain}`;
-  else if (input.winBefore >= 85) why = ', keeping a winning position';
-  else if (input.winBefore >= 65) why = ', keeping a clear advantage';
-  else if (input.winBefore >= 55) why = ', keeping a slight edge';
-  else if (input.winBefore > 45) why = ', keeping the position equal';
+  else if (input.winBefore >= STANDING.winning) why = ', keeping a winning position';
+  else if (input.winBefore >= STANDING.clearlyBetter) why = ', keeping a clear advantage';
+  else if (input.winBefore >= STANDING.slightlyBetter) why = ', keeping a slight edge';
+  else if (input.winBefore > 100 - STANDING.slightlyBetter) why = ', keeping the position equal';
   else why = ', the toughest defense';
   return `Best was ${best.san}${why}.`;
 }

@@ -1,21 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  baseClassification,
-  classifyMove,
-  mateSwingClassification,
-  type ClassifyInput,
-} from './classify';
+import { describe, expect, it } from 'vitest';
+import { baseClassification, classifyMove, type ClassifyInput } from './classify';
 import { THRESHOLDS } from './thresholds';
 import type { SacrificeInfo } from './types';
 
 const EPS = 1e-6;
-const {
-  loss: LOSS,
-  brilliant: BRILLIANT,
-  great: GREAT,
-  missedWin: MISSED,
-  mate: MATE,
-} = THRESHOLDS;
+const { loss: LOSS, brilliant: BRILLIANT, great: GREAT, miss: MISS } = THRESHOLDS;
 
 /** A quiet, non-book move with many alternatives that loses nothing. */
 const QUIET: ClassifyInput = {
@@ -198,8 +187,8 @@ describe('classifyMove: Great', () => {
   });
 
   it('measures the gap from the best line before the move', () => {
-    // The search after the move saw less, but both lines of the same search still differ by 15.
-    expect(classify({ ...GREAT_INPUT, winBefore: 55, winAfter: 51, winSecondBest: 40 })).toBe(
+    // The search after the move saw less, but both lines of the same search still differ by 10.
+    expect(classify({ ...GREAT_INPUT, winBefore: 55, winAfter: 53, winSecondBest: 45 })).toBe(
       'great',
     );
   });
@@ -216,7 +205,7 @@ describe('classifyMove: Great', () => {
   });
 
   it('is never Great for the move that delivers checkmate', () => {
-    expect(classify({ ...GREAT_INPUT, isCheckmate: true, mateAfter: 0 })).toBe('best');
+    expect(classify({ ...GREAT_INPUT, isCheckmate: true })).toBe('best');
     // Brilliant still takes precedence (a mating move cannot offer material in practice).
     expect(classify({ ...BRILLIANT_INPUT, winSecondBest: 30, isCheckmate: true })).toBe(
       'brilliant',
@@ -234,9 +223,9 @@ describe('classifyMove: Great', () => {
 
   it('keeps the documented thresholds', () => {
     expect(GREAT).toEqual({
-      minGapToSecond: 15,
-      maxSecondBestWin: 70,
-      maxLoss: 5,
+      minGapToSecond: 9,
+      maxSecondBestWin: 61,
+      maxLoss: 3,
       obviousCaptureGain: 2,
     });
   });
@@ -267,144 +256,104 @@ describe('classifyMove: Great', () => {
   });
 });
 
-describe('classifyMove: Missed Win', () => {
-  const missed = (winBefore: number, winAfter: number) =>
-    classify({ winBefore, winAfter, bestUci: 'd2d4' });
+describe('classifyMove: Miss', () => {
+  /** An error of `loss` from a 65% position with a move that is not the engine's choice. */
+  const error = (loss: number, overrides: Partial<ClassifyInput> = {}) =>
+    classify({ winBefore: 65, winAfter: 65 - loss, bestUci: 'd2d4', ...overrides });
 
-  it('labels letting a winning position slip to roughly equal a Missed Win', () => {
-    expect(missed(85, 50)).toBe('missedWin');
-    expect(missed(75, 55)).toBe('missedWin');
+  it('is a plain error when there was no particular chance', () => {
+    expect(error(8)).toBe('inaccuracy');
+    expect(error(15)).toBe('mistake');
+    // Even from a winning position: being clearly better is not a chance missed.
+    expect(classify({ winBefore: 85, winAfter: 55, bestUci: 'd2d4' })).toBe('blunder');
   });
 
-  it('requires a winning position before the move', () => {
-    expect(missed(MISSED.minWinBefore, MISSED.maxWinAfter - EPS)).toBe('missedWin');
-    expect(missed(MISSED.minWinBefore - EPS, MISSED.maxWinAfter - EPS)).toBe('mistake');
-    // About +2.5 slipping to +0.8 is not a winning position thrown away.
-    expect(missed(72.8, 57.5)).toBe('mistake');
+  it('labels an error Miss when the best move started a forced mate', () => {
+    // Mate → +10 (87.9 %) loses 12 points: a Mistake that lets the mate slip.
+    expect(classify({ winBefore: 100, winAfter: 87.9, bestUci: 'd2d4', mateBefore: 3 })).toBe(
+      'missedWin',
+    );
+    // The opponent's mate is no chance.
+    expect(error(15, { mateBefore: -3 })).toBe('mistake');
   });
 
-  it('keeps the documented thresholds', () => {
-    expect(MISSED).toEqual({ minWinBefore: 75, maxWinAfter: 60, minWinAfter: 40, minLoss: 10 });
+  it('labels an error Miss when the best line wins material', () => {
+    expect(error(8, { bestLineGain: MISS.minMaterialWon })).toBe('missedWin');
+    expect(error(15, { bestLineGain: 9 })).toBe('missedWin');
+    expect(error(8, { bestLineGain: MISS.minMaterialWon - 1 })).toBe('inaccuracy');
   });
 
-  it('uses a half-open interval [minWinAfter, maxWinAfter) for the position after', () => {
-    expect(missed(75, MISSED.minWinAfter)).toBe('missedWin');
-    expect(missed(75, MISSED.minWinAfter - EPS)).toBe('blunder');
-    expect(missed(75, MISSED.maxWinAfter - EPS)).toBe('missedWin');
-    expect(missed(75, MISSED.maxWinAfter)).toBe('mistake');
+  it('does not count material that the move played wins as well', () => {
+    // Both lines win the piece (taking with the other piece, or a move later): nothing missed.
+    expect(error(8, { bestLineGain: 3, playedLineGain: 3 })).toBe('inaccuracy');
+    expect(error(8, { bestLineGain: 3, playedLineGain: 2 })).toBe('inaccuracy');
+    expect(error(8, { bestLineGain: 3, playedLineGain: 1 })).toBe('missedWin');
+    // Material the move played loses is the refutation's business, not a missed chance.
+    expect(error(8, { bestLineGain: 1, playedLineGain: -3 })).toBe('inaccuracy');
+    expect(error(8, { bestLineGain: 2, playedLineGain: -3 })).toBe('missedWin');
   });
 
-  it('keeps Blunder when the position becomes lost', () => {
-    expect(missed(90, 20)).toBe('blunder');
+  it("labels an error Miss when it gives back most of the opponent's mistake", () => {
+    // The opponent gave away 15 points; giving back half of them or more is a Miss.
+    expect(error(7.5, { opponentGift: 15 })).toBe('missedWin');
+    expect(error(7.4, { opponentGift: 15 })).toBe('inaccuracy');
+    // A gift smaller than a Mistake's worth is no real chance.
+    expect(error(8, { opponentGift: MISS.minGift })).toBe('missedWin');
+    expect(error(8, { opponentGift: MISS.minGift - EPS })).toBe('inaccuracy');
+  });
+
+  it('keeps a plain Mistake or Blunder when the move leaves the mover clearly worse', () => {
+    const chance = { mateBefore: 2, bestLineGain: 3, opponentGift: 30 };
+    expect(error(65 - MISS.minWinAfter, chance)).toBe('missedWin');
+    expect(error(65 - MISS.minWinAfter + EPS, chance)).toBe('blunder');
   });
 
   it('never replaces Best, Excellent or Good', () => {
-    expect(classify({ winBefore: 80, winAfter: 50, uci: 'd2d4', bestUci: 'd2d4' })).toBe('best');
+    const chance = { mateBefore: 2, bestLineGain: 3, opponentGift: 30 };
+    expect(error(4, chance)).toBe('good');
+    expect(error(1, chance)).toBe('excellent');
+    expect(error(15, { ...chance, uci: 'd2d4' })).toBe('best');
   });
 
   it('gives Book and Forced precedence', () => {
-    expect(classify({ winBefore: 85, winAfter: 50, inBook: true })).toBe('book');
-    expect(classify({ winBefore: 85, winAfter: 50, legalMoveCount: 1 })).toBe('forced');
-  });
-});
-
-describe('classifyMove: mate swings', () => {
-  /** A move other than the engine's choice. */
-  const swing = (overrides: Partial<ClassifyInput>) => classify({ bestUci: 'd2d4', ...overrides });
-
-  it('grades allowing a forced mate by how bad the position already was', () => {
-    // -7.0 → mated: 7.1 % → 2.5 % loses only 4.6 points, yet the game is now lost by force.
-    expect(swing({ winBefore: 7.1, winAfter: 2.5, mateAfter: -3 })).toBe('blunder');
-    expect(swing({ winBefore: MATE.allowedBlunderAbove, winAfter: 2.5, mateAfter: -3 })).toBe(
-      'mistake',
-    );
-    expect(swing({ winBefore: 5, winAfter: 2.5, mateAfter: -3 })).toBe('mistake');
-    expect(swing({ winBefore: MATE.allowedMistakeAbove, winAfter: 2.5, mateAfter: -3 })).toBe(
-      'inaccuracy',
-    );
-    expect(swing({ winBefore: 2.5, winAfter: 2.5, mateAfter: -1 })).toBe('inaccuracy');
-  });
-
-  it('does not punish a mate that was already coming', () => {
-    expect(swing({ winBefore: 2.5, winAfter: 2.5, mateBefore: -5, mateAfter: -2 })).toBe('best');
-  });
-
-  it('grades letting a forced mate slip by the advantage that is left', () => {
-    // Mate → +10 or more: still 97.5 %, so the win % alone sees no loss at all.
-    expect(swing({ winBefore: 97.5, winAfter: 97.54, mateBefore: 3 })).toBe('inaccuracy');
-    expect(swing({ winBefore: 97.5, winAfter: MATE.lostInaccuracyFrom, mateBefore: 3 })).toBe(
-      'inaccuracy',
-    );
-    expect(swing({ winBefore: 97.5, winAfter: 95, mateBefore: 3 })).toBe('mistake');
-    expect(swing({ winBefore: 97.5, winAfter: MATE.lostMistakeFrom, mateBefore: 3 })).toBe(
-      'mistake',
-    );
-    expect(swing({ winBefore: 97.5, winAfter: 90, mateBefore: 3 })).toBe('blunder');
-  });
-
-  it('accepts a slower mate or delivering checkmate', () => {
-    expect(swing({ winBefore: 97.5, winAfter: 97.5, mateBefore: 2, mateAfter: 4 })).toBe('best');
-    expect(swing({ winBefore: 97.5, winAfter: 100, mateBefore: 1, mateAfter: 0 })).toBe('best');
-  });
-
-  it('keeps the worse of the mate label and the win % label', () => {
-    // Mate → about +2.0 loses 30 points: a Blunder either way.
-    expect(swing({ winBefore: 97.5, winAfter: 67.5, mateBefore: 2 })).toBe('blunder');
-    // Mate → equal is still a Missed Win.
-    expect(swing({ winBefore: 97.5, winAfter: 50, mateBefore: 2 })).toBe('missedWin');
-    // Turning your own mate into the opponent's.
-    expect(swing({ winBefore: 97.5, winAfter: 2.5, mateBefore: 2, mateAfter: -2 })).toBe('blunder');
-  });
-
-  it("exempts the engine's top move, Book and Forced", () => {
-    expect(swing({ winBefore: 30, winAfter: 2.5, mateAfter: -2, uci: 'd2d4' })).toBe('best');
-    expect(swing({ winBefore: 97.5, winAfter: 97.5, mateBefore: 2, inBook: true })).toBe('book');
-    expect(swing({ winBefore: 7.1, winAfter: 2.5, mateAfter: -1, legalMoveCount: 1 })).toBe(
-      'forced',
-    );
-  });
-
-  it('is not Brilliant when the sacrifice lets a forced mate slip', () => {
-    const sacrifice = { ...BRILLIANT_INPUT, bestUci: 'd2d4', winBefore: 97.5, winAfter: 97.5 };
-    expect(classify(sacrifice)).toBe('brilliant');
-    expect(classify({ ...sacrifice, mateBefore: 4 })).toBe('inaccuracy');
-  });
-
-  it('returns null when no mate appears or disappears', () => {
-    expect(mateSwingClassification({ winBefore: 60, winAfter: 40 })).toBeNull();
-    expect(
-      mateSwingClassification({ winBefore: 97.5, winAfter: 97.5, mateBefore: 3, mateAfter: 2 }),
-    ).toBeNull();
+    expect(error(15, { mateBefore: 2, inBook: true })).toBe('book');
+    expect(error(15, { mateBefore: 2, legalMoveCount: 1 })).toBe('forced');
   });
 
   it('keeps the documented thresholds', () => {
-    expect(MATE).toEqual({
-      allowedBlunderAbove: 7,
-      allowedMistakeAbove: 2.5,
-      lostInaccuracyFrom: 97.5,
-      lostMistakeFrom: 93,
+    expect(MISS).toEqual({
+      minMaterialWon: 2,
+      minGift: 10,
+      minShareGivenBack: 0.5,
+      minWinAfter: 40,
     });
   });
 });
 
-describe('classifyMove: Missed Win minimum loss', () => {
-  afterEach(() => {
-    vi.doUnmock('./thresholds');
-    vi.resetModules();
+describe('classifyMove: forced mates', () => {
+  /** A move other than the engine's choice. */
+  const move = (overrides: Partial<ClassifyInput>) => classify({ bestUci: 'd2d4', ...overrides });
+
+  it('grades walking into a forced mate by the win % it costs (a mate is 0 %)', () => {
+    expect(move({ winBefore: 27, winAfter: 0 })).toBe('blunder'); // about -5.0 → mated
+    expect(move({ winBefore: 12.1, winAfter: 0 })).toBe('mistake'); // -10.0 → mated
+    expect(move({ winBefore: 8, winAfter: 0 })).toBe('inaccuracy');
   });
 
-  it('requires a loss of at least minLoss (only reachable with tuned thresholds)', async () => {
-    // With the shipped numbers the interval rules already imply loss > minLoss,
-    // so widen the window to check that minLoss is enforced on its own.
-    vi.resetModules();
-    vi.doMock('./thresholds', async (importOriginal) => {
-      const original = await importOriginal<typeof import('./thresholds')>();
-      const missedWin = { ...original.THRESHOLDS.missedWin, maxWinAfter: 72, minLoss: 15 };
-      return { ...original, THRESHOLDS: { ...original.THRESHOLDS, missedWin } };
-    });
-    const tuned = await import('./classify');
-    const input = { ...QUIET, bestUci: 'd2d4', winBefore: 80 };
-    expect(tuned.classifyMove({ ...input, winAfter: 66 })).toBe('mistake'); // loss 14
-    expect(tuned.classifyMove({ ...input, winAfter: 65 })).toBe('missedWin'); // loss 15
+  it('grades letting a forced mate slip by the advantage that is left (a mate is 100 %)', () => {
+    expect(move({ winBefore: 100, winAfter: 92 })).toBe('inaccuracy');
+    expect(move({ winBefore: 100, winAfter: 87.9 })).toBe('mistake'); // mate → +10
+    expect(move({ winBefore: 100, winAfter: 64.5 })).toBe('blunder'); // mate → +3
+  });
+
+  it('accepts a slower mate or delivering checkmate', () => {
+    expect(move({ winBefore: 100, winAfter: 100, mateBefore: 2 })).toBe('best');
+    expect(move({ winBefore: 100, winAfter: 100, mateBefore: 1, isCheckmate: true })).toBe('best');
+  });
+
+  it('is not Brilliant when the sacrifice lets a forced mate slip', () => {
+    const sacrifice = { ...BRILLIANT_INPUT, bestUci: 'd2d4', winBefore: 100, winAfter: 100 };
+    expect(classify(sacrifice)).toBe('brilliant');
+    expect(classify({ ...sacrifice, winAfter: 87.9, mateBefore: 4 })).toBe('missedWin');
   });
 });

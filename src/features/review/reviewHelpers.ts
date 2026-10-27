@@ -480,7 +480,9 @@ export function resolvePerspective(
 /**
  * The library entry to store for a finished review, or null to keep the stored one.
  * - A stored entry from a deeper analysis is kept (it is more accurate); it only gains a
- *   perspective when it had none.
+ *   perspective when it had none. Unless its accuracies are on another scale than the
+ *   review's (the setting changed since): then the review replaces it, so the library
+ *   follows the scale the user picked.
  * - A known perspective is never dropped: a review opened without one keeps the stored one.
  * - Saving at the same depth again keeps the first review date, so revisiting a game does
  *   not reorder lists sorted by it, while labels still follow the current rules.
@@ -493,7 +495,11 @@ export function libraryEntryToSave(
   existing: LibraryEntry | null,
   now = Date.now(),
 ): LibraryEntry | null {
-  if (existing && existing.engine.depth > review.engine.depth) {
+  if (
+    existing &&
+    existing.engine.depth > review.engine.depth &&
+    existing.accuracyModel === review.accuracyModel
+  ) {
     return perspective && !existing.perspective ? { ...existing, perspective } : null;
   }
   const known = perspective ?? existing?.perspective;

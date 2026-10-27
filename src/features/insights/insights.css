@@ -13,7 +13,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) .kb-viz {
+  :root:not([data-theme]) .kb-viz {
     --viz-series: #2a78d6;
     --viz-series-wash: rgb(42 120 214 / 0.1);
     --viz-context: #8592a0;
@@ -24,4 +24,11 @@
   --viz-series: #2a78d6;
   --viz-series-wash: rgb(42 120 214 / 0.1);
   --viz-context: #8592a0;
+}
+
+/* Classic: a warm context grey that sits with the charcoal surfaces. */
+:root[data-theme='classic'] .kb-viz {
+  --viz-series: #4a93ea;
+  --viz-series-wash: rgb(74 147 234 / 0.14);
+  --viz-context: #7a756e;
 }

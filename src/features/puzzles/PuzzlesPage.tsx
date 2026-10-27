@@ -88,7 +88,7 @@ function isThemeFilter(value: string | null): value is ThemeFilter {
 /** /puzzles: puzzles built from the mistakes in the player's reviewed games. */
 export default function PuzzlesPage() {
   useDocumentTitle('Puzzles · Kibitz');
-  const { entries, progress, activity, record } = usePuzzleData();
+  const { entries, outdated, progress, activity, record } = usePuzzleData();
   const [params, setParams] = useSearchParams();
 
   const players = useMemo(() => (entries ? libraryPlayers(entries) : []), [entries]);
@@ -184,7 +184,7 @@ export default function PuzzlesPage() {
 
   if (!entries) return <PuzzlesSkeleton />;
 
-  if (!player) return <NoGamesState />;
+  if (!player) return <NoGamesState outdated={outdated} />;
 
   return (
     <div className="mx-auto w-full max-w-2xl lg:max-w-none">
@@ -451,17 +451,26 @@ function EmptyCard({ title, children }: { title: string; children: ReactNode }) 
   );
 }
 
-/** No reviewed games with a known player yet. */
-function NoGamesState() {
+/**
+ * No reviewed games with a known player yet. `outdated` games were reviewed by an older
+ * version of Kibitz: they no longer count, which the card explains.
+ */
+function NoGamesState({ outdated }: { outdated: number }) {
   const recent = useSettings((s) => s.recent[0]);
   return (
     <div className="mx-auto w-full max-w-2xl">
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Puzzles</h1>
       <EmptyCard title="Puzzles come from your reviewed games">
+        {outdated > 0 && (
+          <p className="max-w-md text-sm leading-relaxed text-muted">
+            Kibitz has changed how it scores games since you last reviewed, so those games need a
+            fresh review before they make puzzles again. Your puzzle progress is kept.
+          </p>
+        )}
         <p className="max-w-md text-sm leading-relaxed text-muted">
-          Every mistake, blunder and missed win in a game you review becomes a puzzle: the position
-          is set up so you can find the move you missed, and the ones you get wrong come back until
-          they stick.
+          Every mistake, blunder and miss in a game you review becomes a puzzle: the position is set
+          up so you can find the move you missed, and the ones you get wrong come back until they
+          stick.
         </p>
         <p className="max-w-md text-sm leading-relaxed text-muted">
           Look up your Chess.com or Lichess games and review a few. (Imported PGNs don’t count:

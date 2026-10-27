@@ -18,8 +18,8 @@ username ──► sources/chesscom.ts | sources/lichess.ts ──► GameRecord
          PositionAnalysis[]  (MultiPV 2, evals from White's point of view)
                  │
      core/review.ts buildGameReview  ◄── core/openings (book moves, opening name)
-        ├─ core/winPercent.ts   eval → win %
-        ├─ core/accuracy.ts     per-move + game accuracy
+        ├─ core/winPercent.ts   eval → win % (calibrated scale)
+        ├─ core/accuracy.ts     per-move + game accuracy (accuracyModel.ts: calibrated or Lichess)
         ├─ core/material.ts     sacrifice detection (legal static exchange)
         ├─ core/classify.ts     labels (thresholds.ts)
         ├─ core/tactics.ts      stories: the line that shows why (forks, pins, mates...)
@@ -40,7 +40,7 @@ A full-depth review of a 60-move game takes minutes on a laptop, so the review i
 
 1. **Quick pass** (`QUICK_PASS` in `engine/presets.ts`: depth 8, at most 250 ms per position). A complete, provisional review appears within seconds, even on a phone. It is skipped when a complete review is already available.
 2. **Full pass** at the preset's depth (Fast 12, Standard 16, Deep 20, each with a time cap per position). The review is rebuilt as results stream in, throttled so that a slow device keeps responding (`rebuildInterval`), and progress updates are delivered at most every 200 ms.
-3. **Double-check** (`engine/refine.ts`). Each position is searched on its own, so a search can miss what the next one sees. Up to 16 of the moves that matter most (Brilliant, Great, Missed Win, Mistake, Blunder) are searched again, 4 plies deeper with twice the time. A move's two positions are only applied together, and each verified analysis keeps the one it replaced: a position also belongs to the neighbouring move, which keeps its full-pass pair unless its other position was verified too. A label never compares a verified position with an unverified one.
+3. **Double-check** (`engine/refine.ts`). Each position is searched on its own, so a search can miss what the next one sees. Up to 16 of the moves that matter most (Brilliant, Great, Miss, Mistake, Blunder) are searched again, 4 plies deeper with twice the time. A move's two positions are only applied together, and each verified analysis keeps the one it replaced: a position also belongs to the neighbouring move, which keeps its full-pass pair unless its other position was verified too. A label never compares a verified position with an unverified one.
 
 Every pass saves to the IndexedDB cache as it goes, so a closed tab or a reload resumes where it stopped, and a finished review reopens without running the engine. The cache stores raw engine output per game and settings (with a `refined` flag), never reviews.
 
@@ -62,10 +62,10 @@ Texts are written to the player who made the move. When the review knows who you
 
 ## Library, insights and puzzles
 
-A finished review is saved to the **library** (`library/library.ts`, IndexedDB store `kibitz-library`) as a compact entry: the game record, accuracies, and per move the label, win % before and after, the best line and the clock. A deeper review replaces a shallower one, never the other way round. Insights and puzzles read only the library, so they work offline and never re-run the engine.
+A finished review is saved to the **library** (`library/library.ts`, IndexedDB store `kibitz-library`) as a compact entry: the game record, accuracies and their scale, and per move the label, win % before and after, accuracy, the best line and the clock. A deeper review replaces a shallower one, never the other way round, unless the stored one is on another accuracy scale than the one in Settings. Insights and puzzles read only the library, so they work offline and never re-run the engine. Entries carry `LIBRARY_VERSION`; when it changes (as when accuracy moved to the calibrated scale), older entries are ignored until the game is reviewed again, and the insights and puzzles pages say so.
 
 - **Insights** (`features/insights`): results, openings, rating, accuracy by phase, move quality, time trouble and costliest mistakes across a player's reviewed games (`stats.ts`, pure). The batch job (`analysisJob.ts`) analyses many games in the background, with the same full pass and double-check as the review screen, and adds them to the library. There is one engine: the job pauses between searches while a review analyses (`holdInsightsJob`).
-- **Puzzles** (`features/puzzles`): every Mistake, Blunder and Missed Win of yours whose best move is clearly the one to find becomes a puzzle (`generate.ts`). A move you try is judged by the engine (`practice/checkMove.ts`), so another winning move counts too. Progress uses a light version of SM-2 spaced repetition (`progress.ts`, IndexedDB store `kibitz-puzzles`).
+- **Puzzles** (`features/puzzles`): every Mistake, Blunder and Miss of yours whose best move is clearly the one to find becomes a puzzle (`generate.ts`). A move you try is judged by the engine (`practice/checkMove.ts`), so another winning move counts too. Progress uses a light version of SM-2 spaced repetition (`progress.ts`, IndexedDB store `kibitz-puzzles`).
 
 ## Voice
 
@@ -104,7 +104,7 @@ Everything can be cleared in Settings → Storage, or with the browser's site da
 
 **Cache analyses, not reviews.** IndexedDB stores the raw engine output per game and settings. Reviews are rebuilt from it in milliseconds, so classification rules and explanations can change without invalidating anyone's cache, and an interrupted analysis resumes where it stopped.
 
-**Win %, not centipawns.** Losing 150 centipawns matters in an equal position and barely matters when you are a rook up. Measuring loss in win % (the open Lichess model) treats both correctly. See [CLASSIFICATION.md](CLASSIFICATION.md).
+**Win %, not centipawns.** Losing 150 centipawns matters in an equal position and barely matters when you are a rook up. Measuring loss in win % treats both correctly. Kibitz's win % and accuracy are an open model calibrated against published accuracy figures from Chess.com game reviews (the Lichess formulas remain available as a second accuracy scale). See [CLASSIFICATION.md](CLASSIFICATION.md).
 
 **Rule-based explanations.** Stories come from replaying the engine's line with chess.js and a small attack map, not from a language model: they are free, instant, work offline, and every sentence can be traced to a rule and a test.
 

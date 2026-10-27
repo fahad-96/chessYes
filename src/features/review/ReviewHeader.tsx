@@ -11,8 +11,10 @@ function PlayerName({ player, color }: { player: PlayerInfo; color: 'w' | 'b' })
       <span
         aria-hidden="true"
         className={cn(
-          'h-2.5 w-2.5 shrink-0 rounded-full border border-line',
-          color === 'w' ? 'bg-[var(--eval-white)]' : 'bg-[var(--eval-black)]',
+          'h-2.5 w-2.5 shrink-0 rounded-full ring-1',
+          color === 'w'
+            ? 'bg-[var(--eval-white)] ring-black/25'
+            : 'bg-[var(--eval-black)] ring-white/30',
         )}
       />
       {player.title && (

@@ -79,7 +79,7 @@ Open an issue with the game (link or PGN), the move, what Kibitz said and what y
 
 - Keep PRs focused; one feature or fix per PR.
 - Add or update tests for logic changes.
-- Check UI changes at phone width (320-400px) and in both light and dark themes, with tap targets of at least 40px.
+- Check UI changes at phone width (320-400px) and in the classic, dark and light themes, with tap targets of at least 40px.
 - Don't use another site's name, logo or visual design as Kibitz branding.
 
 ## License

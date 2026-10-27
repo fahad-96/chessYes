@@ -895,29 +895,41 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
   ) : null;
 
   if (isDesktop) {
+    // A full-height layout: the board column fills the screen under the app header, and the
+    // review panel scrolls on its own with the move controls pinned at its bottom, so the
+    // board can be as large as the screen allows and the controls never leave the screen.
     return (
-      <div className="w-full">
-        <ReviewHeader record={record} review={review} actions={headerActions} />
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_400px] items-start gap-6">
-          {/* The board is sized so the whole column fits under the sticky header; while a story
-              plays it makes room for the caption, so the column is never pushed under it. */}
-          <section
-            aria-label="Board"
+      <div className="grid h-[calc(100dvh-6rem)] min-h-[30rem] w-full grid-cols-[minmax(0,1fr)_400px] gap-6">
+        <section
+          aria-label="Board"
+          className="flex min-h-0 min-w-0 flex-col items-center justify-center"
+        >
+          {/* The board is square, so the column's width follows the height left after the
+              player strips (and the caption while a story plays); the eval bar and its gap
+              (2.25rem) add to the width, not the height. */}
+          <div
             className={cn(
-              'sticky top-20 mx-auto flex w-full min-w-[22rem] flex-col gap-2',
-              storyCaption ? 'max-w-[calc(100dvh-22.5rem)]' : 'max-w-[calc(100dvh-19.5rem)]',
+              'flex w-full min-w-[22rem] flex-col gap-1.5',
+              showEvalBar
+                ? storyCaption
+                  ? 'max-w-[calc(100dvh-12.5rem)]'
+                  : 'max-w-[calc(100dvh-9.25rem)]'
+                : storyCaption
+                  ? 'max-w-[calc(100dvh-14.75rem)]'
+                  : 'max-w-[calc(100dvh-11.5rem)]',
             )}
           >
             {renderStrip(topColor)}
             {boardBlock}
             {renderStrip(bottomColor)}
             {storyCaption}
-            {nav('mt-1')}
-          </section>
+          </div>
+        </section>
+        <aside aria-label="Game review" className="flex min-h-0 min-w-0 flex-col gap-3">
           {/* Once the user steps through the game, the current move and the graph come first
-              so they stay next to the board instead of below the fold. */}
-          <aside aria-label="Game review" className="flex min-w-0 flex-col gap-4">
-            {/* The board column has no room left below the board for the tour bar. */}
+              so they stay next to the board instead of further down the panel. */}
+          <div className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-2 [scrollbar-gutter:stable]">
+            <ReviewHeader record={record} review={review} compact actions={headerActions} />
             {tourBar}
             {analysisCard}
             {sidePanel}
@@ -927,8 +939,9 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
             {(session || ply > 0) && summaryCard}
             {movesCard}
             {keyMoments}
-          </aside>
-        </div>
+          </div>
+          {nav()}
+        </aside>
       </div>
     );
   }

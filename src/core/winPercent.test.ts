@@ -29,36 +29,60 @@ function analysis(fen: string, scores: Score[], terminal?: PositionAnalysis['ter
 }
 
 describe('cpToWinPercent', () => {
-  it('matches the Lichess curve at known points', () => {
+  it('matches the calibrated curve at the documented points (the default)', () => {
     expect(cpToWinPercent(0)).toBe(50);
-    expect(cpToWinPercent(100)).toBeCloseTo(59.1026, 4);
-    expect(cpToWinPercent(300)).toBeCloseTo(75.1126, 4);
-    expect(cpToWinPercent(-200)).toBeCloseTo(32.3788, 4);
-    expect(cpToWinPercent(1000)).toBeCloseTo(97.5447, 4);
+    expect(cpToWinPercent(50)).toBeCloseTo(52.4822, 4);
+    expect(cpToWinPercent(100)).toBeCloseTo(54.9523, 4);
+    expect(cpToWinPercent(300)).toBeCloseTo(64.4792, 4);
+    expect(cpToWinPercent(-200)).toBeCloseTo(40.1917, 4);
+    expect(cpToWinPercent(700)).toBeCloseTo(80.0783, 4);
+    expect(cpToWinPercent(1000)).toBeCloseTo(87.947, 4);
+    expect(cpToWinPercent(300)).toBe(cpToWinPercent(300, 'calibrated'));
+  });
+
+  it('matches the Lichess curve at known points', () => {
+    expect(cpToWinPercent(0, 'lichess')).toBe(50);
+    expect(cpToWinPercent(100, 'lichess')).toBeCloseTo(59.1026, 4);
+    expect(cpToWinPercent(300, 'lichess')).toBeCloseTo(75.1126, 4);
+    expect(cpToWinPercent(-200, 'lichess')).toBeCloseTo(32.3788, 4);
+    expect(cpToWinPercent(1000, 'lichess')).toBeCloseTo(97.5447, 4);
   });
 
   it('is symmetric around 50 and increasing', () => {
-    for (const value of [10, 55, 250, 999]) {
-      expect(cpToWinPercent(value) + cpToWinPercent(-value)).toBeCloseTo(100, 10);
-      expect(cpToWinPercent(value + 1)).toBeGreaterThan(cpToWinPercent(value));
+    for (const model of ['calibrated', 'lichess'] as const) {
+      for (const value of [10, 55, 250, 999]) {
+        expect(cpToWinPercent(value, model) + cpToWinPercent(-value, model)).toBeCloseTo(100, 10);
+        expect(cpToWinPercent(value + 1, model)).toBeGreaterThan(cpToWinPercent(value, model));
+      }
     }
   });
 
   it('clamps scores beyond ±1000 centipawns', () => {
-    expect(cpToWinPercent(5000)).toBe(cpToWinPercent(CP_CEILING));
-    expect(cpToWinPercent(-5000)).toBe(cpToWinPercent(-CP_CEILING));
+    for (const model of ['calibrated', 'lichess'] as const) {
+      expect(cpToWinPercent(5000, model)).toBe(cpToWinPercent(CP_CEILING, model));
+      expect(cpToWinPercent(-5000, model)).toBe(cpToWinPercent(-CP_CEILING, model));
+    }
   });
 });
 
 describe('scoreToWinPercent', () => {
   it('converts centipawn scores', () => {
     expect(scoreToWinPercent(cp(100))).toBe(cpToWinPercent(100));
+    expect(scoreToWinPercent(cp(100), 'lichess')).toBe(cpToWinPercent(100, 'lichess'));
   });
 
-  it('treats mates as ±1000 centipawns regardless of distance', () => {
-    expect(scoreToWinPercent(mate(1))).toBe(cpToWinPercent(1000));
-    expect(scoreToWinPercent(mate(12))).toBe(cpToWinPercent(1000));
-    expect(scoreToWinPercent(mate(-3))).toBe(cpToWinPercent(-1000));
+  it('treats a forced mate as a certain result, whatever its distance (calibrated)', () => {
+    expect(scoreToWinPercent(mate(1))).toBe(100);
+    expect(scoreToWinPercent(mate(12))).toBe(100);
+    expect(scoreToWinPercent(mate(-3))).toBe(0);
+    // Ten pawns up is close to winning, but not certain.
+    expect(scoreToWinPercent(cp(1000))).toBeLessThan(90);
+  });
+
+  it('treats mates as ±1000 centipawns regardless of distance (Lichess)', () => {
+    expect(scoreToWinPercent(mate(1), 'lichess')).toBe(cpToWinPercent(1000, 'lichess'));
+    expect(scoreToWinPercent(mate(12), 'lichess')).toBe(cpToWinPercent(1000, 'lichess'));
+    expect(scoreToWinPercent(mate(-3), 'lichess')).toBe(cpToWinPercent(-1000, 'lichess'));
   });
 });
 
@@ -72,11 +96,23 @@ describe('winPercentFor', () => {
 describe('positionWhiteWinPercent', () => {
   it('uses the best line only', () => {
     expect(positionWhiteWinPercent(analysis(AFTER_E4, [cp(30), cp(400)]))).toBe(cpToWinPercent(30));
+    expect(positionWhiteWinPercent(analysis(AFTER_E4, [cp(30), cp(400)]), 'lichess')).toBe(
+      cpToWinPercent(30, 'lichess'),
+    );
   });
 
-  it('scores checkmate for the side that delivered it', () => {
-    expect(positionWhiteWinPercent(analysis(WHITE_MATED, [], 'checkmate'))).toBe(0);
-    expect(positionWhiteWinPercent(analysis(BLACK_MATED, [], 'checkmate'))).toBe(100);
+  it('scores a forced mate in the best line per model', () => {
+    expect(positionWhiteWinPercent(analysis(AFTER_E4, [mate(-4)]))).toBe(0);
+    expect(positionWhiteWinPercent(analysis(AFTER_E4, [mate(-4)]), 'lichess')).toBe(
+      cpToWinPercent(-1000, 'lichess'),
+    );
+  });
+
+  it('scores checkmate for the side that delivered it, in both models', () => {
+    for (const model of ['calibrated', 'lichess'] as const) {
+      expect(positionWhiteWinPercent(analysis(WHITE_MATED, [], 'checkmate'), model)).toBe(0);
+      expect(positionWhiteWinPercent(analysis(BLACK_MATED, [], 'checkmate'), model)).toBe(100);
+    }
   });
 
   it('scores every other terminal state as a draw, even if lines are present', () => {

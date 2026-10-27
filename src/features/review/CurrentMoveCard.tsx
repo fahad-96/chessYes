@@ -132,8 +132,8 @@ export function CurrentMoveCard({
             : 'Use the arrow keys or the buttons below the board.'}
         </p>
         {showStartButton && totalPlies > 0 && (
-          <Button variant="primary" onClick={onStart}>
-            <Play aria-hidden="true" className="h-4 w-4" />
+          <Button variant="primary" size="xl" onClick={onStart} className="w-full">
+            <Play aria-hidden="true" className="h-5 w-5 fill-current" />
             Start review
           </Button>
         )}
@@ -143,6 +143,16 @@ export function CurrentMoveCard({
 
   const label = `${moveNumberLabel(move.moveNumber, move.color)} ${move.san}`;
   const mover = perspectiveColor === move.color ? 'You' : move.color === 'w' ? 'White' : 'Black';
+  // The reply belongs to the other side: "your" reply when that side is the viewer.
+  const replyColor = move.color === 'w' ? 'b' : 'w';
+  const replier =
+    perspectiveColor === replyColor
+      ? 'Your'
+      : perspectiveColor === move.color
+        ? 'Your opponent’s'
+        : replyColor === 'w'
+          ? 'White’s'
+          : 'Black’s';
   const played = `${mover} played ${label}`;
 
   if (!moveReview) {
@@ -261,8 +271,7 @@ export function CurrentMoveCard({
           title={
             REPLY_MATTERS.has(classification) ? (
               <>
-                Opponent&apos;s best reply:{' '}
-                <strong className="font-semibold">{playedLine.san}</strong>
+                {replier} best reply: <strong className="font-semibold">{playedLine.san}</strong>
               </>
             ) : (
               'Engine continuation'

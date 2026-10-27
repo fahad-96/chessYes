@@ -56,7 +56,7 @@ export function Layout() {
           event.preventDefault();
           document.getElementById('main')?.focus();
         }}
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-accent focus:px-3 focus:py-2 focus:text-accent-fg"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-button focus:px-3 focus:py-2 focus:text-accent-fg"
       >
         Skip to content
       </a>
@@ -77,7 +77,7 @@ export function Layout() {
 function Header() {
   const { pathname } = useLocation();
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
+    <header className="sticky top-0 z-40 border-b border-line bg-chrome/80 backdrop-blur-md supports-[backdrop-filter]:bg-chrome/70">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4">
         <Link to="/" aria-label="Kibitz home" className="-ml-1 rounded-lg px-1 py-1">
           <Logo />
@@ -176,7 +176,8 @@ function useFocusOnNavigation() {
 
 /**
  * Mirrors the theme settings onto <html> (index.css keys the colour tokens off
- * data-theme / data-board) and keeps the browser UI colour (theme-color) in sync.
+ * data-theme / data-board) and keeps the browser UI colour (theme-color) in sync with
+ * the header bar (--chrome: the page background, or the darker bar of the classic theme).
  */
 function useDocumentTheme(theme: ThemeSetting, boardTheme: BoardTheme) {
   // Layout effect: apply before paint so a non-system theme never flashes.
@@ -191,8 +192,9 @@ function useDocumentTheme(theme: ThemeSetting, boardTheme: BoardTheme) {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (!meta) return;
     const sync = () => {
-      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-      if (bg) meta.content = bg;
+      const style = getComputedStyle(document.documentElement);
+      const color = (style.getPropertyValue('--chrome') || style.getPropertyValue('--bg')).trim();
+      if (color) meta.content = color;
     };
     sync();
     if (theme !== 'system' || typeof matchMedia !== 'function') return;

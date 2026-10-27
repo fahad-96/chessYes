@@ -427,8 +427,8 @@ export function TimeTroubleSection({ entries }: { entries: readonly PlayerEntry[
             />
           </div>
           <p className="mt-3 text-xs text-muted">
-            Errors are mistakes, blunders and missed wins. The clock is the time you had left after
-            each move, from the game’s clock times.
+            Errors are mistakes, blunders and misses. The clock is the time you had left after each
+            move, from the game’s clock times.
           </p>
         </>
       )}

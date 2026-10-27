@@ -58,8 +58,10 @@ export function GameRow({ game, username, accuracy }: GameRowProps) {
             <span
               aria-hidden="true"
               className={cn(
-                'h-2.5 w-2.5 rounded-full ring-1 ring-line',
-                color === 'w' ? 'bg-[var(--eval-white)]' : 'bg-[var(--eval-black)]',
+                'h-2.5 w-2.5 rounded-full ring-1',
+                color === 'w'
+                  ? 'bg-[var(--eval-white)] ring-black/25'
+                  : 'bg-[var(--eval-black)] ring-white/30',
               )}
             />
             <span>{color === 'w' ? 'White' : 'Black'}</span>

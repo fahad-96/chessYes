@@ -22,10 +22,17 @@ export function narrationAt(game: ParsedGame, review: GameReview | null, ply: nu
   const moveReview = review?.moves[ply - 1];
   if (!moveReview) return capitalize(textToSpeech(`${move.san}.`));
   // The explanation usually leads with the story already, and says more around it; the
-  // story is told instead only when it shows something the explanation leaves out.
-  const { why, explanation } = moveReview;
+  // story is told instead only when it shows something the explanation leaves out. Not
+  // for a Miss: its explanation is about the chance let go ("You had mate in 6..."), and
+  // already tells the opponent's reply when that is the main reason.
+  const { why, explanation, classification } = moveReview;
   const story =
-    why && storyMatters(why) && !explanation.includes(why.text.trim()) ? why.text : undefined;
+    why &&
+    classification !== 'missedWin' &&
+    storyMatters(why) &&
+    !explanation.includes(why.text.trim())
+      ? why.text
+      : undefined;
   return moveNarration({
     san: move.san,
     color: move.color,

@@ -175,8 +175,33 @@ describe('moveNarration', () => {
       'Book move. This is the Italian Game.',
       'Bishop takes g8 is a book move. This is the Italian Game.',
     ],
+    [
+      'missedWin',
+      'Miss. You had mate in 1 with Ra8#.',
+      'Bishop takes g8 is a miss. You had mate in 1 with Rook a8 checkmate.',
+    ],
+    [
+      'mistake',
+      'Mistake. Best was Nd2, keeping the position equal.',
+      'Bishop takes g8 is a mistake. Best was Knight d2, keeping the position equal.',
+    ],
   ] as const)('does not repeat the label of a %s move', (classification, explanation, said) => {
     expect(moveNarration({ san: 'Bxg8', color: 'b', classification, explanation })).toBe(said);
+  });
+
+  it('names a Miss once when it tells the story', () => {
+    expect(
+      moveNarration({
+        san: 'Nd5',
+        color: 'w',
+        classification: 'missedWin',
+        explanation: 'Miss. You missed Nxh4, which wins the undefended queen on h4.',
+        story: 'Your opponent replies Qxd5 and wins your knight on d5.',
+        bestSan: 'Nxh4',
+      }),
+    ).toBe(
+      'Knight d5 is a miss. Your opponent replies Queen takes d5 and wins your knight on d5. Best was Knight takes h4.',
+    );
   });
 
   it('joins "Good move, though ..." to the verdict', () => {

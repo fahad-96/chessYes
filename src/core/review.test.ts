@@ -11,6 +11,7 @@ import {
   type OpeningBookData,
   type OpeningInfo,
 } from './openings';
+import { RATED_GAMES, USER_GAME_ID } from './__fixtures__/rated';
 import { REVIEW_FORMAT_VERSION, buildGameReview, pickKeyMoments } from './review';
 import { THRESHOLDS } from './thresholds';
 import {
@@ -126,7 +127,7 @@ function scholarAnalyses(): PositionAnalysis[] {
   return [
     analysed(g, 0, ['e2e4 e7e5', cp(30)], ['d2d4 d7d5', cp(25)]),
     analysed(g, 1, ['e7e5 g1f3', cp(30)], ['c7c5 g1f3', cp(35)]),
-    analysed(g, 2, ['g1f3 b8c6', cp(30)], ['f1c4 g8f6', cp(25)]),
+    analysed(g, 2, ['g1f3 b8c6', cp(70)], ['f1c4 g8f6', cp(25)]),
     analysed(g, 3, ['b8c6 f1c4', cp(0)], ['g7g6 h5e5', cp(60)]),
     analysed(g, 4, ['f1c4 g7g6', cp(0)], ['f1b5 g8f6', cp(-10)]),
     analysed(g, 5, ['g7g6 h5f3', cp(0)], ['d8e7 b1c3', cp(10)]),
@@ -151,7 +152,7 @@ describe('buildGameReview: a complete game', () => {
     expect(classifications(result.moves)).toEqual([
       'best', // e4: engine move
       'best', // e5: engine move
-      'good', // Qh5: +0.3 → 0.0 loses 2.8 points
+      'good', // Qh5: +0.7 → 0.0 loses 3.5 points
       'best', // Nc6: engine move, alternatives close
       'best', // Bc4: engine move
       'blunder', // Nf6??: allows mate in one
@@ -163,7 +164,7 @@ describe('buildGameReview: a complete game', () => {
 
   it('builds the win % series from every position, ending in mate', () => {
     const { whiteWinPercents } = review();
-    expect(whiteWinPercents).toEqual(analyses.map(positionWhiteWinPercent));
+    expect(whiteWinPercents).toEqual(analyses.map((analysis) => positionWhiteWinPercent(analysis)));
     expect(whiteWinPercents).toHaveLength(8);
     expect(whiteWinPercents[0]).toBeCloseTo(cpToWinPercent(30), 10);
     expect(whiteWinPercents[7]).toBe(100);
@@ -173,11 +174,12 @@ describe('buildGameReview: a complete game', () => {
     const nf6 = review().moves[5]!;
     expect(nf6).toMatchObject({ ply: 6, color: 'b', san: 'Nf6', uci: 'g8f6' });
     expect(nf6.winBefore).toBeCloseTo(50, 10);
-    expect(nf6.winAfter).toBeCloseTo(100 - cpToWinPercent(1000), 10);
+    // A forced mate is a certain result: 0 % for the side that gets mated.
+    expect(nf6.winAfter).toBe(0);
     expect(nf6.winLoss).toBeCloseTo(nf6.winBefore - nf6.winAfter, 10);
     expect(nf6.accuracy).toBe(moveAccuracy(nf6.winBefore, nf6.winAfter));
     expect(nf6.evalAfter).toEqual(mate(1));
-    expect(nf6.whiteWinAfter).toBeCloseTo(cpToWinPercent(1000), 10);
+    expect(nf6.whiteWinAfter).toBe(100);
     expect(nf6.best).toEqual({
       uci: 'g7g6',
       san: 'g6',
@@ -247,6 +249,23 @@ describe('buildGameReview: a complete game', () => {
     expect(result.black.accuracy).toBeLessThan(result.white.accuracy);
   });
 
+  it('computes the accuracies on the Lichess scale when asked, with the same labels', () => {
+    const calibrated = review();
+    const lichess = buildGameReview(SCHOLAR, analyses, { ...NO_BOOK, accuracyModel: 'lichess' });
+    expect(classifications(lichess.moves)).toEqual(classifications(calibrated.moves));
+    expect(lichess.whiteWinPercents).toEqual(calibrated.whiteWinPercents);
+
+    const series = analyses.map((analysis) => positionWhiteWinPercent(analysis, 'lichess'));
+    const expected = gameAccuracy(series, 'w', 'lichess');
+    expect(lichess.white.accuracy).toBe(expected.white);
+    expect(lichess.black.accuracy).toBe(expected.black);
+    expect(lichess.black.accuracy).not.toBeCloseTo(calibrated.black.accuracy, 0);
+    // Per move too: 3...Nf6?? from Black's side, on the Lichess win % of the same positions.
+    expect(lichess.moves[5]!.accuracy).toBe(
+      moveAccuracy(100 - series[5]!, 100 - series[6]!, 'lichess'),
+    );
+  });
+
   it('marks the blunder as a key moment', () => {
     expect(review().keyMoments).toEqual([6]);
   });
@@ -254,7 +273,7 @@ describe('buildGameReview: a complete game', () => {
   it('only looks for sacrifices where Brilliant is still possible', () => {
     review();
     const checked = sacrificeMock.mock.calls.map(([, uci]) => uci);
-    // Not Qh5 (loses 2.8 points), not Nf6 (blunder) and not Qxf7# (the game is over).
+    // Not Qh5 (loses 3.5 points), not Nf6 (blunder) and not Qxf7# (the game is over).
     expect(checked).toEqual(['e2e4', 'e7e5', 'b8c6', 'f1c4']);
     expect(sacrificeMock).toHaveBeenCalledWith(SCHOLAR.moves[4]!.fenBefore, 'f1c4');
   });
@@ -269,10 +288,44 @@ describe('buildGameReview: classifications in context', () => {
     expect(move?.winLoss).toBeCloseTo(cpToWinPercent(30) - cpToWinPercent(-500), 10);
   });
 
-  it('labels throwing away a winning position a Missed Win', () => {
+  it('labels throwing away a winning position a plain error when nothing was there to take', () => {
     const game = gameFromSan(['e4']);
     const analyses = [analysed(game, 0, ['d2d4', cp(400)]), analysed(game, 1, ['e7e5', cp(0)])];
-    expect(classifications(buildGameReview(game, analyses, NO_BOOK).moves)).toEqual(['missedWin']);
+    expect(classifications(buildGameReview(game, analyses, NO_BOOK).moves)).toEqual(['mistake']);
+  });
+
+  it("labels a move that does not take the material the opponent's blunder offered a Miss", () => {
+    // 1.e4 e5 2.Nf3 Qh4?? 3.d3?: Nxh4 wins the queen.
+    const game = gameFromSan(['e4', 'e5', 'Nf3', 'Qh4', 'd3']);
+    const analyses = [
+      ...flatAnalyses(game, [30, 30, 30]),
+      analysed(game, 3, ['b8c6 f1b5', cp(30)]),
+      analysed(game, 4, ['f3h4 b8c6', cp(900)]),
+      analysed(game, 5, ['h4e7 b1c3', cp(50)]),
+    ];
+    const { moves } = buildGameReview(game, analyses, NO_BOOK);
+    expect(classifications(moves).slice(3)).toEqual(['blunder', 'missedWin']);
+    expect(moves[4]?.bestIdea?.materialSwing).toBe(9);
+    expect(moves[4]?.explanation).toBe(
+      'Miss. You missed Nxh4, which wins the undefended queen on h4.',
+    );
+  });
+
+  it("labels giving back most of the opponent's mistake a Miss, a small slip not", () => {
+    // 1.e4 a6 2.h3: made-up evaluations; the engine wanted 2.d4 after Black's slip.
+    const game = gameFromSan(['e4', 'a6', 'h3']);
+    const withGift = (afterA6: number) => [
+      analysed(game, 0, ['e2e4', cp(30)]),
+      analysed(game, 1, ['e7e5 g1f3', cp(30)]),
+      analysed(game, 2, ['d2d4 e7e6', cp(afterA6)]),
+      analysed(game, 3, ['e7e5 g1f3', cp(0)]),
+    ];
+    // a6 gives away 10.6 points (a Mistake) and h3 gives back all of them.
+    const big = buildGameReview(game, withGift(250), NO_BOOK).moves;
+    expect(classifications(big).slice(1)).toEqual(['mistake', 'missedWin']);
+    // a6 gives away only 5.9 points (an Inaccuracy): h3 is just an Inaccuracy too.
+    const small = buildGameReview(game, withGift(150), NO_BOOK).moves;
+    expect(classifications(small).slice(1)).toEqual(['inaccuracy', 'inaccuracy']);
   });
 
   it('detects Brilliant and Great moves and puts them first among key moments', () => {
@@ -389,16 +442,17 @@ describe('buildGameReview: classifications in context', () => {
     ]);
   });
 
-  it('labels letting a mate in one slip an Inaccuracy even when the win % does not move', () => {
+  it('labels letting a mate in one slip a Miss, although the position stays winning', () => {
     const game = gameFromSan(['h3'], '6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1');
     const analyses = [
       analysed(game, 0, ['a1a8', mate(1)], ['g1f1 g8f8', cp(1500)]),
       analysed(game, 1, ['h7h6 a1a8 g8h7', cp(1200)]),
     ];
     const [move] = buildGameReview(game, analyses, NO_BOOK).moves;
-    expect(move?.winLoss).toBe(0);
-    expect(move?.classification).toBe('inaccuracy');
-    expect(move?.explanation).toBe('Inaccuracy. You had mate in 1 with Ra8#.');
+    // Mate (100 %) → +12 (clamped to +10, 87.9 %).
+    expect(move?.winLoss).toBeCloseTo(100 - cpToWinPercent(1000), 10);
+    expect(move?.classification).toBe('missedWin');
+    expect(move?.explanation).toBe('Miss. You had mate in 1 with Ra8#.');
   });
 
   it('labels walking into a forced mate in a bad position a Mistake', () => {
@@ -410,7 +464,9 @@ describe('buildGameReview: classifications in context', () => {
       analysed(game, 2, ['d1h5 g7g6 h5g6', mate(3)]),
     ];
     const f6 = buildGameReview(game, analyses, NO_BOOK).moves[1];
-    expect(f6?.winLoss).toBeLessThan(THRESHOLDS.loss.good);
+    // -8.0 (17 %) → mated (0 %).
+    expect(f6?.winLoss).toBeCloseTo(100 - cpToWinPercent(800), 10);
+    expect(f6?.winLoss).toBeLessThanOrEqual(THRESHOLDS.loss.mistake);
     expect(f6?.classification).toBe('mistake');
     expect(f6?.explanation).toBe(
       'Mistake. This allows a forced mate in 3, starting with Qh5+. Best was e5, the toughest defense.',
@@ -431,9 +487,9 @@ describe('buildGameReview: classifications in context', () => {
     const game = gameFromSan(['Kd7', 'e4', 'Kd6'], '4k3/8/8/8/8/8/4P3/4K3 b - - 0 1');
     const analyses = [
       analysed(game, 0, ['e8e7', cp(0)]),
-      analysed(game, 1, ['e2e4', cp(300)]),
-      analysed(game, 2, ['d7d6', cp(300)]),
-      analysed(game, 3, ['e1d2', cp(300)]),
+      analysed(game, 1, ['e2e4', cp(600)]),
+      analysed(game, 2, ['d7d6', cp(600)]),
+      analysed(game, 3, ['e1d2', cp(600)]),
     ];
     const result = buildGameReview(game, analyses, NO_BOOK);
     expect(result.moves.map((m) => m.color)).toEqual(['b', 'w', 'b']);
@@ -471,7 +527,7 @@ describe('buildGameReview: verified analyses', () => {
   const verify = (index: number): PositionAnalysis => ({
     ...original[index]!,
     depth: 20,
-    lines: original[index]!.lines.map((line) => ({ ...line, score: cp(-300), depth: 20 })),
+    lines: original[index]!.lines.map((line) => ({ ...line, score: cp(-500), depth: 20 })),
     unverified: original[index]!,
   });
   const analyses = [original[0]!, verify(1), verify(2), original[3]!];
@@ -483,9 +539,9 @@ describe('buildGameReview: verified analyses', () => {
     expect(review.moves[0]!.winLoss).toBeCloseTo(0);
     expect(review.moves[2]!.winBefore).toBeCloseTo(review.moves[2]!.winAfter);
     // 1...e5 is judged by the two verified positions.
-    expect(review.moves[1]!.winBefore).toBeCloseTo(100 - cpToWinPercent(-300));
+    expect(review.moves[1]!.winBefore).toBeCloseTo(100 - cpToWinPercent(-500));
     // The graph shows the best estimate of every position.
-    expect(review.whiteWinPercents[1]).toBeCloseTo(cpToWinPercent(-300));
+    expect(review.whiteWinPercents[1]).toBeCloseTo(cpToWinPercent(-500));
   });
 
   it('would turn the unchecked neighbours into errors if pairs were mixed', () => {
@@ -773,6 +829,71 @@ describe('buildGameReview: stories behind the labels', () => {
       terminal(forced, 1, 'insufficient'),
     ];
     expect('why' in buildGameReview(forced, forcedAnalyses, NO_BOOK).moves[0]!).toBe(false);
+  });
+});
+
+describe('buildGameReview: a rated game (the one that started the calibration)', () => {
+  // Kibitz's own depth-16 analysis of a 10-minute game between two players rated about 830.
+  // Its Chess.com review counted 3 Misses for White and none for Black.
+  const rated = RATED_GAMES.find((game) => game.id === USER_GAME_ID)!;
+  const book = createOpeningBook(openingsJson as unknown as OpeningBookData);
+  const review = buildGameReview(rated.game, rated.analyses, { book, engine: ENGINE });
+  const name = (move: MoveReview) =>
+    `${Math.ceil(move.ply / 2)}${move.color === 'w' ? '.' : '...'}${move.san}`;
+  const labelOf = (moveName: string) =>
+    review.moves.find((move) => name(move) === moveName)?.classification;
+
+  it('labels the moves that let a real chance slip a Miss', () => {
+    const misses = review.moves.filter((m) => m.classification === 'missedWin').map(name);
+    // 23.Re1 and 25.Re6+ let a forced mate go.
+    expect(misses).toEqual(['23.Re1', '25.Re6+']);
+    expect(review.white.counts.missedWin).toBe(2);
+    expect(review.black.counts.missedWin).toBe(0);
+  });
+
+  it('does not call it a Miss when the move played still wins the material', () => {
+    // 13.g4 would trap the bishop on h5 at once, but after 13.Nd5 the engine line still
+    // wins it (...a5 Bxd4 exd4 g4 Bxg4 fxg4): Nd5 is slower, not a missed chance.
+    const nd5 = review.moves.find((move) => name(move) === '13.Nd5')!;
+    expect(nd5.bestIdea?.materialSwing).toBe(2);
+    expect(nd5.why?.materialSwing).toBe(2);
+    expect(nd5.classification).toBe('inaccuracy');
+  });
+
+  it('keeps plain errors where there was no particular chance', () => {
+    // 3.b3 answers a small slip (2...g6, an Inaccuracy). 18.Qh2 gives a won position back,
+    // but the best move 18.Nh3 wins nothing: that is a Mistake, not a missed chance.
+    expect(labelOf('3.b3')).toBe('inaccuracy');
+    expect(labelOf('18.Qh2')).toBe('mistake');
+    // Errors that leave Black clearly worse stay Blunders, even right after White's Miss.
+    expect(labelOf('20...Bf4')).toBe('blunder');
+    expect(labelOf('23...Qc8')).toBe('blunder');
+  });
+
+  it('gives the label counts documented in docs/CLASSIFICATION.md', () => {
+    expect(review.white.counts).toMatchObject({
+      book: 2,
+      great: 1,
+      best: 11,
+      excellent: 2,
+      good: 5,
+      inaccuracy: 2,
+      mistake: 1,
+      blunder: 0,
+      missedWin: 2,
+    });
+    expect(review.black.counts).toMatchObject({
+      book: 1,
+      forced: 1,
+      great: 1,
+      best: 5,
+      excellent: 5,
+      good: 4,
+      inaccuracy: 3,
+      mistake: 3,
+      blunder: 2,
+      missedWin: 0,
+    });
   });
 });
 

@@ -3,6 +3,7 @@
  * React or browser APIs, so it can be unit-tested and reused (CLI, worker, ...).
  */
 import type { Color, PieceSymbol, Square } from 'chess.js';
+import type { AccuracyModel } from './accuracyModel';
 
 export type { Color, PieceSymbol, Square };
 
@@ -164,6 +165,7 @@ export const CLASSIFICATIONS = [
   'inaccuracy',
   'mistake',
   'blunder',
+  // Shown as Miss: an error that lets a real chance slip (docs/CLASSIFICATION.md).
   'missedWin',
 ] as const;
 
@@ -196,13 +198,13 @@ export interface MoveReview {
   san: string;
   uci: string;
   classification: Classification;
-  /** Mover's win % (0-100) before the move, assuming best play. */
+  /** Mover's win % (0-100, calibrated scale: winPercent.ts) before the move, assuming best play. */
   winBefore: number;
   /** Mover's win % after the move that was played. */
   winAfter: number;
   /** max(0, winBefore - winAfter). */
   winLoss: number;
-  /** Lichess-style accuracy of this single move, 0-100. */
+  /** Accuracy of this single move, 0-100, on the review's accuracy scale (accuracyModel.ts). */
   accuracy: number;
   /** Evaluation after the move (White POV); null when the game is over after it. */
   evalAfter: Score | null;
@@ -293,7 +295,7 @@ export interface LineStory {
 }
 
 export interface PlayerReview {
-  /** Game accuracy 0-100 (Lichess formula). */
+  /** Game accuracy 0-100, on the review's accuracy scale (accuracyModel.ts). */
   accuracy: number;
   counts: Record<Classification, number>;
 }
@@ -302,6 +304,8 @@ export interface GameReview {
   /** Bump REVIEW_FORMAT_VERSION in core/review.ts when this shape changes (invalidates caches). */
   version: number;
   engine: { name: string; depth: number; multiPv: number };
+  /** The scale of the accuracies (game and per move); labels and win % do not depend on it. */
+  accuracyModel: AccuracyModel;
   moves: MoveReview[];
   white: PlayerReview;
   black: PlayerReview;

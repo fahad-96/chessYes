@@ -90,6 +90,7 @@ function fakeReview(
   return {
     version: 2,
     engine: { name: 'Stockfish 19 lite', depth: 18, multiPv: 2 },
+    accuracyModel: 'calibrated',
     moves,
     white: { accuracy: 90, counts: emptyCounts() },
     black: { accuracy: 80, counts: emptyCounts() },
@@ -151,7 +152,7 @@ describe('annotatedPgn', () => {
     expect(text).toContain('3... Bg4 $6 { [%eval 0.20] Inaccuracy. Best was Qd2. }');
     expect(text).toContain('4. dxe5 $2 { [%eval 0.30] Mistake. Best was Qd2. }');
     expect(text).toContain('4... Bxf3 $4 { [%eval 0.40] Blunder. Best was Qd2. }');
-    expect(text).toContain('5. Qxf3 { [%eval 0.50] Missed win. Best was Qd2. }');
+    expect(text).toContain('5. Qxf3 { [%eval 0.50] Miss. Best was Qd2. }');
     expect(text).toContain('5... dxe5 { [%eval 0.60] }'); // excellent: no NAG, no note
     expect(text.trimEnd().endsWith('1-0')).toBe(true);
   });

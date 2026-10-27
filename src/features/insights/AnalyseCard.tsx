@@ -8,7 +8,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { PRESETS, type PresetId } from '@/engine/presets';
 import { cacheKey } from '@/features/games/playerGames';
 import { insightsPath } from '@/features/games/gameList';
-import type { Platform } from '@/state/settings';
+import { useSettings, type Platform } from '@/state/settings';
 import {
   cancelInsightsJob,
   dismissInsightsJob,
@@ -40,6 +40,7 @@ export interface AnalyseCardProps {
 export function AnalyseCard({ platform, username, games, job, reviewedCount }: AnalyseCardProps) {
   const [count, setCount] = useState<Count>(remembered.count);
   const [presetId, setPresetId] = useState<PresetId>(remembered.presetId);
+  const accuracyModel = useSettings((s) => s.accuracyModel);
   const playerKey = cacheKey(platform, username);
   const ours = job?.playerKey === playerKey ? job : null;
   const otherActive = job && !ours && isJobActive(job) ? job : null;
@@ -48,7 +49,7 @@ export function AnalyseCard({ platform, username, games, job, reviewedCount }: A
 
   const start = () => {
     remembered = { count, presetId };
-    startInsightsJob({ platform, username, records: selected, presetId });
+    startInsightsJob({ platform, username, records: selected, presetId, accuracyModel });
   };
 
   return (

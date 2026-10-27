@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pvToSan, sideToMove, uciToSan } from '@/core/notation';
 import type { Classification, GameRecord } from '@/core/types';
 import {
+  LIBRARY_VERSION,
   emptyCounts,
   type LibraryEntry,
   type LibraryMove,
@@ -48,6 +49,7 @@ function libMove(spec: MoveSpec): LibraryMove {
     winBefore: spec.winBefore,
     winAfter: spec.winAfter,
     winLoss: Math.max(0, spec.winBefore - spec.winAfter),
+    accuracy: 50,
   };
   if (spec.winSecondBest !== undefined) move.winSecondBest = spec.winSecondBest;
   if (spec.best) {
@@ -76,11 +78,12 @@ function libEntry(
     pgn: '',
   };
   const entry: LibraryEntry = {
-    v: 1,
+    v: LIBRARY_VERSION,
     gameId,
     record,
     reviewedAt: endTime + 1,
     engine: { name: 'Stockfish', depth: 16, multiPv: 2 },
+    accuracyModel: 'calibrated',
     white: { accuracy: 80, counts: emptyCounts() },
     black: { accuracy: 80, counts: emptyCounts() },
     moves,
@@ -166,7 +169,7 @@ describe('generatePuzzles', () => {
     expect(generatePuzzles([libEntry('g', [noBest, playedBest])])).toEqual([]);
   });
 
-  it('only takes mistakes, blunders and missed wins', () => {
+  it('only takes mistakes, blunders and misses', () => {
     for (const classification of [
       'best',
       'excellent',

@@ -8,6 +8,7 @@ import type {
   ParsedGame,
   PositionAnalysis,
 } from '@/core/types';
+import { DEFAULT_ACCURACY_MODEL, type AccuracyModel } from '@/core/accuracyModel';
 import { parsePgn } from '@/core/pgn';
 import { buildGameReview } from '@/core/review';
 import { loadOpeningBook, type OpeningBook } from '@/core/openings';
@@ -261,6 +262,7 @@ function buildReviewSafely(
   analyses: readonly (PositionAnalysis | null)[],
   book: OpeningBook | null,
   settings: AnalysisSettings,
+  accuracyModel: AccuracyModel,
 ): BuiltReview {
   if (!analyses[0]) return NO_REVIEW;
   const startedAt = performance.now();
@@ -268,6 +270,7 @@ function buildReviewSafely(
     const review = buildGameReview(game, analyses as Analyses, {
       book,
       engine: { name: ENGINE_NAME, depth: settings.depth, multiPv: settings.multiPv },
+      accuracyModel,
     });
     return { review, failed: false };
   } catch (error) {
@@ -324,6 +327,8 @@ export function useGameReview(gameId: string): GameReviewState {
   const asUsername = searchParams.get('as');
 
   const settingsPreset = useSettings((state) => state.preset);
+  // Only the accuracies follow it: the review is rebuilt from the same analyses when it changes.
+  const accuracyModel = useSettings((state) => state.accuracyModel);
   const basePresetId = useMemo(() => safeResolvePreset(settingsPreset), [settingsPreset]);
   const [presetOverride, setPresetOverride] = useState<PresetId | null>(null);
   const presetId = presetOverride ?? basePresetId;
@@ -552,7 +557,8 @@ export function useGameReview(gameId: string): GameReviewState {
       const settings = refineSettings(preset);
       const book = await getBook();
       if (signal.aborted) return;
-      const { review } = buildReviewSafely(game, full, book, preset);
+      // Only the labels matter here, and they do not depend on the accuracy scale.
+      const { review } = buildReviewSafely(game, full, book, preset, DEFAULT_ACCURACY_MODEL);
       // Without a review there is nothing to select from; the next visit tries again.
       if (!review) return;
       const plies = selectMovesToRefine(review);
@@ -770,15 +776,17 @@ export function useGameReview(gameId: string): GameReviewState {
   );
   const live = useMemo(
     () =>
-      game && book.ready ? buildReviewSafely(game, analyses, book.book, livePreset) : NO_REVIEW,
-    [game, analyses, book, livePreset],
+      game && book.ready
+        ? buildReviewSafely(game, analyses, book.book, livePreset, accuracyModel)
+        : NO_REVIEW,
+    [game, analyses, book, livePreset, accuracyModel],
   );
   const previousBuilt = useMemo(
     () =>
       game && book.ready && previous
-        ? buildReviewSafely(game, previous.analyses, book.book, previous.preset)
+        ? buildReviewSafely(game, previous.analyses, book.book, previous.preset, accuracyModel)
         : NO_REVIEW,
-    [game, previous, book],
+    [game, previous, book, accuracyModel],
   );
   const liveReview = live.review;
   const previousReview = previousBuilt.review;

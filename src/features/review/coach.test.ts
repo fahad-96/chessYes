@@ -36,6 +36,7 @@ function review(moves: MoveReview[], keyMoments: number[]): GameReview {
   return {
     version: 1,
     engine: { name: 'Stockfish', depth: 18, multiPv: 2 },
+    accuracyModel: 'calibrated',
     moves,
     white: { accuracy: 90, counts: emptyCounts() },
     black: { accuracy: 90, counts: emptyCounts() },
@@ -115,6 +116,23 @@ describe('narrationAt', () => {
       [4],
     );
     expect(narrationAt(game, plain, 4)).toBe('Knight c6 is a blunder. This hangs your knight.');
+  });
+
+  it('tells what a Miss let go rather than the opponent’s reply', () => {
+    const miss = review(
+      [
+        ...reviewed.moves.slice(0, 3),
+        {
+          ...reviewed.moves[3]!,
+          classification: 'missedWin',
+          explanation: 'Miss. You had mate in 6, starting with d6.',
+        },
+      ],
+      [4],
+    );
+    expect(narrationAt(game, miss, 4)).toBe(
+      'Knight c6 is a miss. You had mate in 6, starting with d6.',
+    );
   });
 
   it('falls back to the explanation, then to the move alone', () => {

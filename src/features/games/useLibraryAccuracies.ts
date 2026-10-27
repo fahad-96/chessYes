@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { AccuracyModel } from '@/core/accuracyModel';
 import type { GameRecord } from '@/core/types';
 import { entryColor } from '@/features/insights/stats';
 import { getLibraryEntry, type LibraryEntry } from '@/library/library';
-import type { Platform } from '@/state/settings';
+import { useSettings, type Platform } from '@/state/settings';
 
 /**
  * Accuracies of the searched player in games that are already reviewed (in the library),
  * for the badges on the game list. Only the rows on screen are looked up, one IndexedDB
- * read each, so a long list costs nothing until it is shown.
+ * read each, so a long list costs nothing until it is shown. A game reviewed on another
+ * accuracy scale than the one in Settings shows no badge until it is reviewed again.
  */
 
+interface FoundAccuracy {
+  accuracy: number;
+  model: AccuracyModel;
+}
+
 /** Accuracies found earlier, so coming back from a review shows the badges at once. */
-const known = new Map<string, number>();
+const known = new Map<string, FoundAccuracy>();
 
 const knownKey = (platform: Platform, username: string, gameId: string) =>
   `${platform}:${username.trim().toLowerCase()}:${gameId}`;
@@ -33,13 +40,14 @@ export function useLibraryAccuracies(
   platform: Platform,
   username: string,
 ): ReadonlyMap<string, number> {
+  const accuracyModel = useSettings((s) => s.accuracyModel);
   const ids = useMemo(() => games.map((game) => game.id), [games]);
   const idsKey = ids.join('\n');
-  const [found, setFound] = useState<Map<string, number>>(() => {
-    const initial = new Map<string, number>();
+  const [found, setFound] = useState<Map<string, FoundAccuracy>>(() => {
+    const initial = new Map<string, FoundAccuracy>();
     for (const id of ids) {
-      const accuracy = known.get(knownKey(platform, username, id));
-      if (accuracy !== undefined) initial.set(id, accuracy);
+      const value = known.get(knownKey(platform, username, id));
+      if (value !== undefined) initial.set(id, value);
     }
     return initial;
   });
@@ -56,7 +64,10 @@ export function useLibraryAccuracies(
     void Promise.all(
       lookup.map(async (id) => {
         const entry = await getLibraryEntry(id).catch(() => null);
-        return [id, entry ? libraryAccuracy(entry, platform, username) : null] as const;
+        const accuracy = entry ? libraryAccuracy(entry, platform, username) : null;
+        const value: FoundAccuracy | null =
+          entry && accuracy !== null ? { accuracy, model: entry.accuracyModel } : null;
+        return [id, value] as const;
       }),
     ).then((results) => {
       if (!active) return;
@@ -64,15 +75,16 @@ export function useLibraryAccuracies(
       setFound((previous) => {
         const next = new Map(previous);
         let changed = false;
-        for (const [id, accuracy] of results) {
+        for (const [id, value] of results) {
           const key = knownKey(platform, username, id);
-          if (accuracy === null) {
+          if (value === null) {
             known.delete(key);
             changed = next.delete(id) || changed;
           } else {
-            known.set(key, accuracy);
-            if (next.get(id) !== accuracy) {
-              next.set(id, accuracy);
+            known.set(key, value);
+            const old = next.get(id);
+            if (old?.accuracy !== value.accuracy || old.model !== value.model) {
+              next.set(id, value);
               changed = true;
             }
           }
@@ -85,5 +97,11 @@ export function useLibraryAccuracies(
     };
   }, [idsKey, platform, username]);
 
-  return found;
+  return useMemo(() => {
+    const onScale = new Map<string, number>();
+    for (const [id, value] of found) {
+      if (value.model === accuracyModel) onScale.set(id, value.accuracy);
+    }
+    return onScale;
+  }, [found, accuracyModel]);
 }

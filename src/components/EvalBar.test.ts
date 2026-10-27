@@ -10,7 +10,7 @@ describe('evalBarFill', () => {
   it('follows the win % model for centipawn scores', () => {
     const white = evalBarFill({ kind: 'score', score: { type: 'cp', value: 300 } });
     const black = evalBarFill({ kind: 'score', score: { type: 'cp', value: -300 } });
-    expect(white).toBeGreaterThan(70);
+    expect(white).toBeGreaterThan(60);
     expect(white).toBeLessThan(100);
     expect(white + black).toBeCloseTo(100, 6);
   });

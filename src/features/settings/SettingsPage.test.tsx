@@ -3,17 +3,19 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { clearPuzzleProgress, loadProgress, recordAttempt } from '@/features/puzzles/progress';
 import {
+  LIBRARY_VERSION,
   clearLibrary,
   emptyCounts,
   getLibraryEntries,
   saveToLibrary,
   type LibraryEntry,
 } from '@/library/library';
+import { useSettings } from '@/state/settings';
 import SettingsPage from './SettingsPage';
 
 function entry(gameId: string): LibraryEntry {
   return {
-    v: 1,
+    v: LIBRARY_VERSION,
     gameId,
     record: {
       id: gameId,
@@ -27,6 +29,7 @@ function entry(gameId: string): LibraryEntry {
     },
     reviewedAt: Date.now(),
     engine: { name: 'Stockfish', depth: 16, multiPv: 2 },
+    accuracyModel: 'calibrated',
     white: { accuracy: 70, counts: emptyCounts() },
     black: { accuracy: 60, counts: emptyCounts() },
     moves: [],
@@ -81,5 +84,44 @@ describe('SettingsPage storage', () => {
     const library = screen.getByRole('button', { name: 'Clear reviewed games library' });
     expect((library as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('heading', { name: 'Voice' })).toBeTruthy();
+  });
+});
+
+describe('SettingsPage appearance', () => {
+  afterEach(() => {
+    useSettings.setState({ theme: 'classic', boardTheme: 'green' });
+  });
+
+  it('switches to the green board with the classic theme, and the board can change after', async () => {
+    useSettings.setState({ theme: 'dark', boardTheme: 'walnut' });
+    render(<SettingsPage />);
+    await screen.findByText('No puzzles tried yet.');
+
+    fireEvent.click(screen.getByRole('radio', { name: /^Light/ }));
+    expect(useSettings.getState()).toMatchObject({ theme: 'light', boardTheme: 'walnut' });
+
+    fireEvent.click(screen.getByRole('radio', { name: /^Classic/ }));
+    expect(useSettings.getState()).toMatchObject({ theme: 'classic', boardTheme: 'green' });
+
+    fireEvent.click(screen.getByRole('radio', { name: /^Ocean/ }));
+    expect(useSettings.getState()).toMatchObject({ theme: 'classic', boardTheme: 'ocean' });
+  });
+});
+
+describe('SettingsPage analysis', () => {
+  afterEach(() => {
+    useSettings.setState({ accuracyModel: 'calibrated' });
+  });
+
+  it('switches the accuracy scale', async () => {
+    render(<SettingsPage />);
+    await screen.findByText('No puzzles tried yet.');
+    const calibrated = screen.getByRole('radio', { name: /^Calibrated \(default\)/ });
+    expect((calibrated as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/big chess sites publish/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: /^Lichess formula/ }));
+    expect(useSettings.getState().accuracyModel).toBe('lichess');
+    expect((calibrated as HTMLInputElement).checked).toBe(false);
   });
 });

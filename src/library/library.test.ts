@@ -1,11 +1,14 @@
+import { createStore, set } from 'idb-keyval';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parsePgn } from '@/core/pgn';
 import type { GameRecord, GameReview, MoveReview } from '@/core/types';
 import {
+  LIBRARY_VERSION,
   clearLibrary,
   emptyCounts,
   getLibraryEntries,
   getLibraryEntry,
+  getOutdatedEntries,
   getPlayerEntries,
   removeFromLibrary,
   saveToLibrary,
@@ -39,7 +42,7 @@ function review(): GameReview {
     winBefore: 52.04,
     winAfter: 51.96,
     winLoss: 0.08,
-    accuracy: 100,
+    accuracy: 99.96,
     evalAfter: { type: 'cp', value: 20 },
     whiteWinAfter: 52,
     best: {
@@ -61,6 +64,7 @@ function review(): GameReview {
   return {
     version: 1,
     engine: { name: 'test', depth: 10, multiPv: 2 },
+    accuracyModel: 'calibrated',
     moves,
     white: { accuracy: 90, counts: emptyCounts() },
     black: { accuracy: 80, counts: emptyCounts() },
@@ -84,10 +88,27 @@ describe('library', () => {
     expect(entry.moves).toHaveLength(3);
     expect(entry.moves[0]!.fenBefore.startsWith('rnbqkbnr/pppppppp')).toBe(true);
     expect(entry.moves[0]!.winBefore).toBe(52);
-    // -1.00 (White POV) is 40.9 % for White and 59.1 % for Black in the Lichess model.
-    expect(entry.moves[0]!.winSecondBest).toBeCloseTo(40.9, 1);
-    expect(entry.moves[1]!.winSecondBest).toBeCloseTo(59.1, 1);
+    // -1.00 (White POV) is 45.0 % for White and 55.0 % for Black on the calibrated scale.
+    expect(entry.moves[0]!.winSecondBest).toBeCloseTo(45.0, 1);
+    expect(entry.moves[1]!.winSecondBest).toBeCloseTo(55.0, 1);
     expect(entry.opening).toEqual({ eco: 'C40', name: "King's Knight Opening" });
+    // The accuracies keep the review's scale, per move too (rounded like the win %).
+    expect(entry.accuracyModel).toBe('calibrated');
+    expect(entry.moves[0]!.accuracy).toBe(100);
+  });
+
+  it('ignores entries saved by an older version, but can still list them', async () => {
+    const current = toLibraryEntry(record('lichess/new', 2000), parsePgn(PGN), review());
+    await saveToLibrary(current);
+    const { accuracyModel: _scale, ...older } = { ...current, gameId: 'lichess/old', v: 1 };
+    await set('lichess/old', older, createStore('kibitz-library', 'entries'));
+    expect(LIBRARY_VERSION).toBeGreaterThan(1);
+
+    expect((await getLibraryEntries()).map((e) => e.gameId)).toEqual(['lichess/new']);
+    expect(await getLibraryEntry('lichess/old')).toBeNull();
+    expect((await getOutdatedEntries()).map((e) => e.gameId)).toEqual(['lichess/old']);
+    await clearLibrary();
+    expect(await getOutdatedEntries()).toEqual([]);
   });
 
   it('saves, lists newest first, filters by player and removes', async () => {

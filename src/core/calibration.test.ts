@@ -19,7 +19,7 @@
  *
  * Fixtures live in src/core/__fixtures__/games. The file name starts with a group
  * (beginner, club, master, famous, ...) that the summary is broken down by; add your own
- * games the same way. For every Brilliant, Great and Missed Win (and every engine top move
+ * games the same way. For every Brilliant, Great and Miss (and every engine top move
  * that the search after it refutes) the position, the move, the engine lines and the
  * numbers behind the label are printed so each one can be checked by hand, with flags such
  * as in-check or winning-capture. A "what if" table then shows how the counts per
@@ -149,6 +149,10 @@ interface MoveFacts {
    * that would have won at least 2 pawns, such as retreating a knight attacked by a pawn.
    */
   rescuesPiece: boolean;
+  /** The engine's best move started a forced mate for the mover. */
+  hadMate: boolean;
+  /** Win % the opponent's previous move gave away, when it was graded an error. */
+  opponentGift?: number;
 }
 
 /** Material in pawn units from `color`'s point of view. */
@@ -184,7 +188,9 @@ function moveFacts(result: GameResult): MoveFacts[] {
   return result.review.moves.map((move, i) => {
     const parsed = result.game.moves[i]!;
     const previous = result.game.moves[i - 1];
+    const previousReview = result.review.moves[i - 1];
     const inCheck = !!previous?.isCheck;
+    const best = move.best?.score;
     const facts: MoveFacts = {
       move,
       fenBefore: parsed.fenBefore,
@@ -200,7 +206,11 @@ function moveFacts(result: GameResult): MoveFacts[] {
         !parsed.captured &&
         parsed.piece !== 'k' &&
         threatenedBefore(parsed.fenBefore, parsed.from) >= 2,
+      hadMate: best?.type === 'mate' && (move.color === 'w') === best.value > 0,
     };
+    if (previousReview && BASE_ERRORS.has(previousReview.classification)) {
+      facts.opponentGift = previousReview.winLoss;
+    }
     if (move.secondBest) {
       facts.winSecond = winPercentFor(scoreToWinPercent(move.secondBest.score), move.color);
     }
@@ -236,11 +246,11 @@ interface BrilliantRule {
   /** Not when the material comes straight back (see MoveFacts.regainedAtOnce). */
   noRegainedAtOnce?: boolean;
 }
-interface MissedWinRule {
-  minWinBefore: number;
+interface MissRule {
+  minMaterialWon: number;
+  minGift: number;
+  minShareGivenBack: number;
   minWinAfter: number;
-  maxWinAfter: number;
-  minLoss: number;
 }
 
 const ungraded = (m: MoveReview) => m.classification === 'book' || m.classification === 'forced';
@@ -273,15 +283,16 @@ function wouldBeGreat(f: MoveFacts, rule: GreatRule): boolean {
   return m.winBefore - f.winSecond >= rule.minGapToSecond && f.winSecond < rule.maxSecondBestWin;
 }
 
-function wouldBeMissedWin(f: MoveFacts, rule: MissedWinRule): boolean {
+/** Would the error be a Miss under `rule` (same logic as classify.ts)? */
+function wouldBeMiss(f: MoveFacts, rule: MissRule): boolean {
   const m = f.move;
-  if (!BASE_ERRORS.has(m.classification)) return false;
-  return (
-    m.winBefore >= rule.minWinBefore &&
-    m.winAfter >= rule.minWinAfter &&
-    m.winAfter < rule.maxWinAfter &&
-    m.winLoss >= rule.minLoss
-  );
+  if (!BASE_ERRORS.has(m.classification) || m.winAfter < rule.minWinAfter) return false;
+  // The 'missed' and 'refutation' stories are what review.ts measures the material with.
+  const materialMissed = (m.bestIdea?.materialSwing ?? 0) - Math.max(0, m.why?.materialSwing ?? 0);
+  const couldWinMaterial = materialMissed >= rule.minMaterialWon;
+  const gift = f.opponentGift ?? 0;
+  const gaveBackGift = gift >= rule.minGift && m.winLoss >= gift * rule.minShareGivenBack;
+  return f.hadMate || couldWinMaterial || gaveBackGift;
 }
 
 // ---------------------------------------------------------------------------
@@ -520,17 +531,22 @@ function formatWhatIf(results: GameResult[], allFacts: MoveFacts[][]): string {
     out.push(`${label.padEnd(width)}${perPlayerGame((f) => wouldBeBrilliant(f, rule))}`);
   }
 
-  const missed = THRESHOLDS.missedWin;
-  const missedRules: MissedWinRule[] = [
-    { ...missed },
-    { ...missed, minWinBefore: 70 },
-    { ...missed, minWinBefore: 80 },
-    { ...missed, minWinAfter: 30 },
-    { ...missed, minWinBefore: 70, minWinAfter: 30 },
+  const miss = THRESHOLDS.miss;
+  const missRules: MissRule[] = [
+    { ...miss },
+    { ...miss, minMaterialWon: 1 },
+    { ...miss, minMaterialWon: 3 },
+    { ...miss, minGift: 5 },
+    { ...miss, minGift: 15 },
+    { ...miss, minGift: Infinity },
+    { ...miss, minWinAfter: 30 },
+    { ...miss, minWinAfter: 50 },
   ];
-  for (const rule of missedRules) {
-    const label = `MissedWin before>=${rule.minWinBefore} after ${rule.minWinAfter}-${rule.maxWinAfter} loss>=${rule.minLoss}`;
-    out.push(`${label.padEnd(width)}${perPlayerGame((f) => wouldBeMissedWin(f, rule))}`);
+  for (const rule of missRules) {
+    const label =
+      `Miss material>=${rule.minMaterialWon} gift>=${rule.minGift} ` +
+      `share>=${rule.minShareGivenBack} after>=${rule.minWinAfter}`;
+    out.push(`${label.padEnd(width)}${perPlayerGame((f) => wouldBeMiss(f, rule))}`);
   }
   return out.join('\n');
 }

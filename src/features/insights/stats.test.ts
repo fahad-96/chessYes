@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { moveAccuracy } from '@/core/accuracy';
 import { START_FEN } from '@/core/notation';
 import type { Classification, Color, GameRecord, GameResult, TimeClass } from '@/core/types';
-import { emptyCounts, type LibraryEntry, type LibraryMove } from '@/library/library';
+import {
+  LIBRARY_VERSION,
+  emptyCounts,
+  type LibraryEntry,
+  type LibraryMove,
+} from '@/library/library';
 import {
   ENDGAME_MATERIAL,
   accuracyTrend,
@@ -315,6 +320,7 @@ function move(ply: number, spec: MoveSpec): LibraryMove {
     winBefore,
     winAfter,
     winLoss: Math.max(0, winBefore - winAfter),
+    accuracy: moveAccuracy(winBefore, winAfter),
   };
   if (spec.clock !== undefined) result.clock = spec.clock;
   return result;
@@ -338,11 +344,12 @@ function entry(
   } = {},
 ): LibraryEntry {
   const result: LibraryEntry = {
-    v: 1,
+    v: LIBRARY_VERSION,
     gameId: record.id,
     record,
     reviewedAt: record.endTime ?? 0,
     engine: { name: 'Stockfish', depth: 12, multiPv: 2 },
+    accuracyModel: 'calibrated',
     white: { accuracy: options.white ?? 90, counts: { ...emptyCounts(), ...options.whiteCounts } },
     black: { accuracy: options.black ?? 80, counts: { ...emptyCounts(), ...options.blackCounts } },
     moves: options.moves ?? moves([{}, {}]),

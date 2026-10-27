@@ -76,7 +76,7 @@ describe('isSuspiciousTopMove', () => {
 });
 
 describe('selectMovesToRefine', () => {
-  it('picks Brilliant, Great, Missed Win, Mistake and Blunder moves, in game order', () => {
+  it('picks Brilliant, Great, Miss, Mistake and Blunder moves, in game order', () => {
     const moves = [
       move(1, 'book'),
       move(2, 'blunder', 30),

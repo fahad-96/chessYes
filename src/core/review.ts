@@ -1,4 +1,5 @@
 import { gameAccuracy, moveAccuracy } from './accuracy';
+import { DEFAULT_ACCURACY_MODEL, type AccuracyModel } from './accuracyModel';
 import { classifyMove } from './classify';
 import { explainMove } from './explain';
 import { detectSacrifice, isRegainedAtOnce, materialBalance, staticExchange } from './material';
@@ -25,7 +26,7 @@ import {
 import { positionWhiteWinPercent, scoreToWinPercent, winPercentFor } from './winPercent';
 
 /** Bump when GameReview's shape or the classification rules change. */
-export const REVIEW_FORMAT_VERSION = 4;
+export const REVIEW_FORMAT_VERSION = 6;
 
 /** Maximum number of key moments highlighted in a review. */
 export const MAX_KEY_MOMENTS = 8;
@@ -33,6 +34,11 @@ export const MAX_KEY_MOMENTS = 8;
 export interface BuildReviewOptions {
   book: OpeningBook | null;
   engine: { name: string; depth: number; multiPv: number };
+  /**
+   * The scale of the accuracies, game and per move (see accuracyModel.ts). Defaults to
+   * 'calibrated'. Labels, win % and the eval graph always use the calibrated win %.
+   */
+  accuracyModel?: AccuracyModel;
 }
 
 /**
@@ -44,14 +50,19 @@ export interface BuildReviewOptions {
  *   a move is reviewed only when both the position before and after it are
  *   available, and reviewing stops at the first gap. `whiteWinPercents` likewise
  *   covers the contiguous analysed prefix.
+ *
+ * Win % values (labels, MoveReview.winBefore/winAfter, whiteWinPercents) are on the
+ * calibrated scale that thresholds.ts is tuned for; only the accuracies follow
+ * `options.accuracyModel`.
  */
 export function buildGameReview(
   game: ParsedGame,
   analyses: (PositionAnalysis | null)[],
   options: BuildReviewOptions,
 ): GameReview {
+  const accuracyModel = options.accuracyModel ?? DEFAULT_ACCURACY_MODEL;
   const positions = analysedPrefix(analyses, game.moves.length + 1);
-  const whiteWinPercents = positions.map(positionWhiteWinPercent);
+  const whiteWinPercents = positions.map((position) => positionWhiteWinPercent(position));
   let bookPlies = countBookPlies(game.moves, options.book);
 
   const moves: MoveReview[] = [];
@@ -63,6 +74,7 @@ export function buildGameReview(
     const whiteBefore = positionWhiteWinPercent(before);
     const whiteAfter = positionWhiteWinPercent(after);
     if (i < bookPlies && leavesBook(move, before, after, whiteBefore, whiteAfter)) bookPlies = i;
+    const previousReview = moves[i - 1];
     moves.push(
       reviewMove({
         move,
@@ -74,12 +86,21 @@ export function buildGameReview(
         whiteAfter,
         inBook: i < bookPlies,
         book: options.book,
+        opponentGift:
+          previousReview && ERRORS.has(previousReview.classification)
+            ? previousReview.winLoss
+            : undefined,
+        accuracyModel,
       }),
     );
   }
 
   const firstMover = sideToMove(game.initialFen);
-  const accuracy = gameAccuracy(whiteWinPercents, firstMover);
+  const accuracyWinPercents =
+    accuracyModel === 'calibrated'
+      ? whiteWinPercents
+      : positions.map((position) => positionWhiteWinPercent(position, accuracyModel));
+  const accuracy = gameAccuracy(accuracyWinPercents, firstMover, accuracyModel);
   const white: PlayerReview = { accuracy: accuracy.white, counts: emptyCounts() };
   const black: PlayerReview = { accuracy: accuracy.black, counts: emptyCounts() };
   for (const move of moves) {
@@ -90,6 +111,7 @@ export function buildGameReview(
   const review: GameReview = {
     version: REVIEW_FORMAT_VERSION,
     engine: options.engine,
+    accuracyModel,
     moves,
     white,
     black,
@@ -113,6 +135,9 @@ interface ReviewMoveInput {
   whiteAfter: number;
   inBook: boolean;
   book: OpeningBook | null;
+  /** Win % the opponent's previous move gave away, when it was graded an error. */
+  opponentGift: number | undefined;
+  accuracyModel: AccuracyModel;
 }
 
 function reviewMove(input: ReviewMoveInput): MoveReview {
@@ -121,6 +146,8 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
   const winBefore = winPercentFor(input.whiteBefore, color);
   const winAfter = winPercentFor(input.whiteAfter, color);
   const winLoss = Math.max(0, winBefore - winAfter);
+  const best = suggestedLine(move.fenBefore, before.lines[0]);
+  const baselineFor = tradeBaseline(move, previousMove, earlierMove);
 
   const secondScore = before.lines[1]?.score;
   const winSecondBest =
@@ -137,6 +164,23 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
     winLoss <= THRESHOLDS.brilliant.maxLoss;
   const sacrifice = mayBeBrilliant ? realSacrifice(move, after) : null;
   const bestUci = before.lines[0]?.pv[0];
+  // What the best line wins only matters where it can make a Miss: an error by win % that is
+  // not the engine's move and does not leave the mover clearly worse. The same story
+  // explains the error later (tellStories), so it is only computed once.
+  const mayBeMiss =
+    !inBook &&
+    legalMoves !== 1 &&
+    best !== undefined &&
+    best.uci !== move.uci &&
+    winLoss > THRESHOLDS.loss.good &&
+    winAfter >= THRESHOLDS.miss.minWinAfter;
+  const playedLine = suggestedLine(move.fenAfter, after.lines[0]);
+  const bestLineGain = mayBeMiss
+    ? missedStory(move, previousMove, best, baselineFor(best.uci)).materialSwing
+    : undefined;
+  // ...and what the line after the move played wins anyway (the refutation, also reused).
+  const playedLineGain =
+    mayBeMiss && playedLine ? refutationStory(move, playedLine).materialSwing : undefined;
 
   const classification = classifyMove({
     color,
@@ -157,16 +201,14 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
     isCheckmate: move.isCheckmate,
     sacrifice,
     mateBefore: mateFor(before.lines[0]?.score, color),
-    // Delivering checkmate is the end of a forced mate, not the loss of one.
-    mateAfter: after.terminal === 'checkmate' ? 0 : mateFor(after.lines[0]?.score, color),
+    bestLineGain,
+    playedLineGain,
+    opponentGift: input.opponentGift,
   });
 
-  const best = suggestedLine(move.fenBefore, before.lines[0]);
   const secondBest = suggestedLine(move.fenBefore, before.lines[1]);
-  const playedLine = suggestedLine(move.fenAfter, after.lines[0]);
   const evalAfter = after.lines[0]?.score ?? null;
   const opening = inBook ? openingAt(book, move.fenAfter) : undefined;
-  const baselineFor = tradeBaseline(move, previousMove, earlierMove);
   const { why, bestIdea } = tellStories({
     move,
     previousMove,
@@ -208,7 +250,7 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
     winBefore,
     winAfter,
     winLoss,
-    accuracy: moveAccuracy(winBefore, winAfter),
+    accuracy: moveAccuracyFor(input, winBefore, winAfter),
     evalAfter,
     whiteWinAfter: input.whiteAfter,
     explanation,
@@ -223,6 +265,21 @@ function reviewMove(input: ReviewMoveInput): MoveReview {
   if (bestIdea) review.bestIdea = bestIdea;
   if (opening) review.opening = opening;
   return review;
+}
+
+/**
+ * The move's accuracy on the review's accuracy scale: from the move's own (calibrated) win %
+ * values, or for the Lichess scale from that model's win % of the same two positions.
+ */
+function moveAccuracyFor(input: ReviewMoveInput, winBefore: number, winAfter: number): number {
+  const model = input.accuracyModel;
+  if (model === 'calibrated') return moveAccuracy(winBefore, winAfter, model);
+  const color = input.move.color;
+  return moveAccuracy(
+    winPercentFor(positionWhiteWinPercent(input.before, model), color),
+    winPercentFor(positionWhiteWinPercent(input.after, model), color),
+    model,
+  );
 }
 
 const ERRORS: ReadonlySet<Classification> = new Set([
@@ -264,7 +321,7 @@ function tradeBaseline(
 
 /**
  * The lines that show why a move got its label (see tactics.describeLine):
- * - Inaccuracies, Mistakes, Blunders and Missed Wins: `why` is the opponent's refutation
+ * - Inaccuracies, Mistakes, Blunders and Misses: `why` is the opponent's refutation
  *   (the engine line after the move) and `bestIdea` what the engine's move would have done.
  * - Brilliant and Great moves: `why` is the idea, the move followed by the engine line.
  * - Best and Excellent moves: the idea too, but only when the move itself sets up a
@@ -279,23 +336,10 @@ function tellStories(input: StoryInput): { why?: LineStory; bestIdea?: LineStory
   const recapture = previousMove?.captured ? previousMove.to : undefined;
 
   if (ERRORS.has(classification)) {
-    const why = playedLine
-      ? story(move.fenAfter, playedLine.pvUci, {
-          kind: 'refutation',
-          player,
-          reviewedSan: move.san,
-          previousCaptureOn: move.captured ? move.to : undefined,
-          startFen: move.fenBefore,
-        })
-      : undefined;
+    const why = playedLine ? refutationStory(move, playedLine) : undefined;
     const bestIdea =
       best && best.uci !== move.uci
-        ? story(move.fenBefore, best.pvUci, {
-            kind: 'missed',
-            player,
-            previousCaptureOn: recapture,
-            startFen: input.missedBaseline,
-          })
+        ? missedStory(move, previousMove, best, input.missedBaseline)
         : undefined;
     return { why, bestIdea };
   }
@@ -330,6 +374,33 @@ const CACHE_SIZE = 2000;
 const storyCache = new Map<string, LineStory>();
 const motifCache = new Map<string, boolean>();
 const sanCache = new Map<string, string[]>();
+
+/** What the opponent does after the move played: the engine line after it. */
+function refutationStory(move: ParsedMove, playedLine: SuggestedLine): LineStory {
+  return story(move.fenAfter, playedLine.pvUci, {
+    kind: 'refutation',
+    player: move.color,
+    reviewedSan: move.san,
+    previousCaptureOn: move.captured ? move.to : undefined,
+    startFen: move.fenBefore,
+  });
+}
+
+/** What the engine's best move would have achieved: its line from the position before. */
+function missedStory(
+  move: ParsedMove,
+  previousMove: ParsedMove | undefined,
+  best: SuggestedLine,
+  startFen: string,
+): LineStory {
+  return story(move.fenBefore, best.pvUci, {
+    kind: 'missed',
+    player: move.color,
+    // A capture just before the line makes taking back on that square a trade.
+    previousCaptureOn: previousMove?.captured ? previousMove.to : undefined,
+    startFen,
+  });
+}
 
 function story(fen: string, pv: string[], options: DescribeLineOptions): LineStory {
   const key = [
@@ -494,7 +565,7 @@ const SETBACKS: ReadonlySet<Classification> = new Set(['missedWin', 'blunder', '
 
 /**
  * Up to MAX_KEY_MOMENTS plies worth stopping at: Brilliant and Great moves first,
- * then the costliest Missed Wins, Blunders and Mistakes. Returned in game order.
+ * then the costliest Misses, Blunders and Mistakes. Returned in game order.
  * Exported for tests.
  */
 export function pickKeyMoments(moves: MoveReview[]): number[] {

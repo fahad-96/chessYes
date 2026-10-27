@@ -20,7 +20,7 @@ import { cacheKey, loadErrorMessage, type PlayerProfile } from '@/features/games
 import { TIME_CLASS_ICONS } from '@/features/games/timeClassIcons';
 import { usePlayerGames } from '@/features/games/usePlayerGames';
 import { formatTimeClass } from '@/lib/format';
-import type { Platform } from '@/state/settings';
+import { useSettings, type Platform } from '@/state/settings';
 import { AnalyseCard } from './AnalyseCard';
 import { isJobActive, useInsightsJob } from './analysisJob';
 import {
@@ -132,9 +132,11 @@ function PlayerInsights({ platform, username }: { platform: Platform; username: 
 
   const job = useInsightsJob();
   const ourJob = job?.playerKey === playerKey ? job : null;
+  const accuracyModel = useSettings((s) => s.accuracyModel);
   const library = usePlayerLibrary(
     platform,
     name,
+    accuracyModel,
     ourJob ? `${ourJob.analysed}|${ourJob.status}` : 'idle',
   );
   const entries = useMemo(
@@ -281,7 +283,10 @@ function PlayerInsights({ platform, username }: { platform: Platform; username: 
                 <ErrorNote message="Your library could not be read." onRetry={library.reload} />
               </div>
             )}
-            {entries && entries.length === 0 && !isJobActive(ourJob) && (
+            {entries && library.leftOut > 0 && !isJobActive(ourJob) && (
+              <LeftOutNote count={library.leftOut} />
+            )}
+            {entries && entries.length === 0 && library.leftOut === 0 && !isJobActive(ourJob) && (
               <p className="mt-4 text-sm text-muted">
                 No reviewed{tcLabel} games yet. Analyse a few above, or open any game from your
                 list: every finished review is added to your library.
@@ -407,6 +412,17 @@ function LoadStatus({
           Load older games
         </Button>
       )}
+    </p>
+  );
+}
+
+/** Reviewed games the library holds on another accuracy scale (see usePlayerLibrary). */
+function LeftOutNote({ count }: { count: number }) {
+  return (
+    <p className="mt-4 text-sm text-muted">
+      {count === 1
+        ? '1 reviewed game is left out because its accuracy was worked out on another scale. Analyse it again above, or open it from your games, to bring it back.'
+        : `${count} reviewed games are left out because their accuracy was worked out on another scale. Analyse them again above, or open them from your games, to bring them back.`}
     </p>
   );
 }

@@ -1,4 +1,5 @@
 import { clear, createStore, del, get, set, values, type UseStore } from 'idb-keyval';
+import { ACCURACY_MODELS, type AccuracyModel } from '@/core/accuracyModel';
 import { CLASSIFICATIONS } from '@/core/types';
 import { scoreToWinPercent, winPercentFor } from '@/core/winPercent';
 import type {
@@ -16,8 +17,12 @@ import type {
  * they work offline and never need to re-run the engine.
  */
 
-/** Bump when LibraryEntry changes shape; older entries are then ignored. */
-export const LIBRARY_VERSION = 1;
+/**
+ * Bump when LibraryEntry changes shape or its numbers change meaning; older entries are then
+ * ignored (see getOutdatedEntries) until the game is reviewed again.
+ * 2: accuracies moved to the calibrated scale, and entries record their scale.
+ */
+export const LIBRARY_VERSION = 2;
 
 /** Who "you" are in a game, when known (the player whose game list it came from). */
 export interface Perspective {
@@ -38,6 +43,8 @@ export interface LibraryMove {
   winBefore: number;
   winAfter: number;
   winLoss: number;
+  /** Accuracy of the move, on the entry's accuracy scale. */
+  accuracy: number;
   /** Mover's win % for the engine's second choice (puzzle uniqueness check). */
   winSecondBest?: number;
   best?: { uci: string; san: string; pvUci: string[]; pvSan: string[] };
@@ -52,11 +59,16 @@ export interface LibraryEntry {
   perspective?: Perspective;
   reviewedAt: number;
   engine: GameReview['engine'];
+  /** The scale of the accuracies in this entry (game and per move). */
+  accuracyModel: AccuracyModel;
   white: PlayerReview;
   black: PlayerReview;
   opening?: { eco: string; name: string };
   moves: LibraryMove[];
 }
+
+/** What an entry saved by an older version still tells: which game it was, and whose. */
+export type OutdatedEntry = Pick<LibraryEntry, 'gameId' | 'record' | 'perspective'>;
 
 let store: UseStore | undefined;
 /** In-memory fallback for browsers without IndexedDB (private modes, locked-down webviews). */
@@ -87,6 +99,7 @@ export function toLibraryEntry(
       winBefore: round1(move.winBefore),
       winAfter: round1(move.winAfter),
       winLoss: round1(move.winLoss),
+      accuracy: round1(move.accuracy),
     };
     if (move.secondBest) {
       entry.winSecondBest = round1(
@@ -111,6 +124,7 @@ export function toLibraryEntry(
     record,
     reviewedAt,
     engine: review.engine,
+    accuracyModel: review.accuracyModel,
     white: review.white,
     black: review.black,
     moves,
@@ -161,6 +175,18 @@ export async function getLibraryEntries(): Promise<LibraryEntry[]> {
   );
 }
 
+/**
+ * Entries saved by an older version of Kibitz (an older LIBRARY_VERSION). They are ignored
+ * everywhere else; this only lets the UI explain where those games went. Never throws.
+ */
+export async function getOutdatedEntries(): Promise<OutdatedEntry[]> {
+  try {
+    return ((await values(libraryStore())) as unknown[]).filter(isOutdatedEntry);
+  } catch {
+    return [];
+  }
+}
+
 /** Entries where the given player is known to be one of the sides. */
 export async function getPlayerEntries(
   platform: Perspective['platform'],
@@ -203,6 +229,19 @@ function isLibraryEntry(value: unknown): value is LibraryEntry {
     typeof entry.gameId === 'string' &&
     typeof entry.record === 'object' &&
     entry.record !== null &&
+    ACCURACY_MODELS.includes(entry.accuracyModel as AccuracyModel) &&
     Array.isArray(entry.moves)
+  );
+}
+
+function isOutdatedEntry(value: unknown): value is OutdatedEntry {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as { v?: unknown; gameId?: unknown; record?: unknown };
+  return (
+    typeof entry.v === 'number' &&
+    entry.v < LIBRARY_VERSION &&
+    typeof entry.gameId === 'string' &&
+    typeof entry.record === 'object' &&
+    entry.record !== null
   );
 }

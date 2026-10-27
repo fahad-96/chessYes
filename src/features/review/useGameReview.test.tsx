@@ -167,6 +167,7 @@ let labels: Record<number, Classification> = {};
 function fakeReview(
   analyses: (PositionAnalysis | null)[],
   engine: GameReview['engine'],
+  accuracyModel: GameReview['accuracyModel'] = 'calibrated',
 ): GameReview {
   const moves: MoveReview[] = [];
   for (let ply = 1; analyses[ply - 1] && analyses[ply]; ply++) {
@@ -186,10 +187,12 @@ function fakeReview(
       explanation: '',
     });
   }
-  const player = { accuracy: 90, counts: {} as GameReview['white']['counts'] };
+  const accuracy = accuracyModel === 'lichess' ? 95 : 90;
+  const player = { accuracy, counts: {} as GameReview['white']['counts'] };
   return {
     version: 2,
     engine,
+    accuracyModel,
     moves,
     white: player,
     black: player,
@@ -233,7 +236,7 @@ function fullCalls() {
 beforeEach(() => {
   labels = { 2: 'blunder' };
   cache = {};
-  useSettings.setState({ preset: 'standard' });
+  useSettings.setState({ preset: 'standard', accuracyModel: 'calibrated' });
   setEngineFactoryForTests(() => fakeEngine());
   vi.mocked(resolveGame).mockResolvedValue(record);
   vi.mocked(parsePgn).mockReturnValue(game);
@@ -241,7 +244,7 @@ beforeEach(() => {
   vi.mocked(analyzeGame).mockImplementation(analyseAll);
   vi.mocked(analyzePositions).mockImplementation(verifyAll);
   vi.mocked(buildGameReview).mockImplementation((_game, analyses, options) =>
-    fakeReview(analyses, options.engine),
+    fakeReview(analyses, options.engine, options.accuracyModel),
   );
 });
 
@@ -313,6 +316,7 @@ describe('useGameReview', () => {
     expect(buildGameReview).toHaveBeenLastCalledWith(game, [positions[0], checked(1), checked(2)], {
       book: expect.anything(),
       engine: { name: ENGINE, depth: 16, multiPv: 2 },
+      accuracyModel: 'calibrated',
     });
 
     await waitFor(() => expect(saveToLibrary).toHaveBeenCalledTimes(1));
@@ -361,6 +365,24 @@ describe('useGameReview', () => {
     expect(result.current.review?.moves).toHaveLength(2);
     // Revisiting a finished game keeps the library in step with the current rules.
     await waitFor(() => expect(saveToLibrary).toHaveBeenCalledTimes(1));
+  });
+
+  it('rebuilds the review on another accuracy scale without the engine, and saves it', async () => {
+    cache[FULL_KEY] = { analyses: positions, refined: true };
+    const { result } = renderReview();
+    await waitFor(() => expect(result.current.analysis.status).toBe('done'));
+    expect(result.current.review).toMatchObject({ accuracyModel: 'calibrated' });
+    await waitFor(() => expect(saveToLibrary).toHaveBeenCalledTimes(1));
+    const labelsBefore = result.current.review?.moves.map((move) => move.classification);
+
+    act(() => useSettings.setState({ accuracyModel: 'lichess' }));
+    await waitFor(() => expect(result.current.review?.accuracyModel).toBe('lichess'));
+    expect(result.current.review?.white.accuracy).toBe(95);
+    expect(result.current.review?.moves.map((move) => move.classification)).toEqual(labelsBefore);
+    expect(analyzeGame).not.toHaveBeenCalled();
+    expect(analyzePositions).not.toHaveBeenCalled();
+    await waitFor(() => expect(saveToLibrary).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(saveToLibrary).mock.calls[1]![0]).toMatchObject({ accuracyModel: 'lichess' });
   });
 
   it('only verifies a cached full analysis that was never verified', async () => {

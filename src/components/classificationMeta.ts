@@ -102,11 +102,12 @@ export const CLASSIFICATION_META: Record<Classification, ClassificationMeta> = {
     symbol: '??',
   },
   missedWin: {
-    label: 'Missed Win',
+    label: 'Miss',
     article: 'a',
     colorVar: 'var(--c-missedWin)',
-    description: 'A winning move was available, but the move played let the win slip away.',
-    phrase: 'missed win',
+    description:
+      "A real chance (a mate, a material win or your opponent's error to punish) was there, and the move let it slip.",
+    phrase: 'miss',
     symbol: '?',
   },
 };

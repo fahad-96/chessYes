@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { AccuracyModel } from '@/core/accuracyModel';
 import type {
   GameRecord,
   GameReview,
@@ -9,7 +10,12 @@ import type {
 } from '@/core/types';
 import { PgnError } from '@/core/pgn';
 import { PRESETS } from '@/engine/presets';
-import { emptyCounts, type LibraryEntry, type Perspective } from '@/library/library';
+import {
+  LIBRARY_VERSION,
+  emptyCounts,
+  type LibraryEntry,
+  type Perspective,
+} from '@/library/library';
 import { NetworkError, NotFoundError, RateLimitError } from '@/sources/http';
 import type { AnalysisState } from './useGameReview';
 import {
@@ -371,6 +377,7 @@ describe('libraryEntryToSave', () => {
   const reviewAt = (depth: number): GameReview => ({
     version: 2,
     engine: { name: 'SF', depth, multiPv: 2 },
+    accuracyModel: 'calibrated',
     moves: [moveReview({ classification: 'best', winLoss: 0 })],
     white: { accuracy: 100, counts: emptyCounts() },
     black: { accuracy: 100, counts: emptyCounts() },
@@ -379,12 +386,17 @@ describe('libraryEntryToSave', () => {
   });
   const alice: Perspective = { platform: 'lichess', username: 'alice', color: 'w' };
   const bob: Perspective = { platform: 'lichess', username: 'bob', color: 'b' };
-  const stored = (depth: number, perspective?: Perspective): LibraryEntry => ({
-    v: 1,
+  const stored = (
+    depth: number,
+    perspective?: Perspective,
+    accuracyModel: AccuracyModel = 'calibrated',
+  ): LibraryEntry => ({
+    v: LIBRARY_VERSION,
     gameId: record.id,
     record,
     reviewedAt: 1000,
     engine: { name: 'SF', depth, multiPv: 2 },
+    accuracyModel,
     white: { accuracy: 90, counts: emptyCounts() },
     black: { accuracy: 80, counts: emptyCounts() },
     moves: [],
@@ -409,6 +421,23 @@ describe('libraryEntryToSave', () => {
     const entry = libraryEntryToSave(record, game, reviewAt(16), alice, stored(16), 5000);
     expect(entry?.reviewedAt).toBe(1000);
     expect(entry?.white.accuracy).toBe(100);
+  });
+
+  it('replaces a deeper stored entry whose accuracies are on another scale', () => {
+    const entry = libraryEntryToSave(
+      record,
+      game,
+      reviewAt(16),
+      null,
+      stored(20, bob, 'lichess'),
+      5000,
+    );
+    expect(entry).toMatchObject({
+      accuracyModel: 'calibrated',
+      engine: { depth: 16 },
+      perspective: bob,
+      reviewedAt: 5000,
+    });
   });
 
   it('keeps a deeper stored entry, only adding a missing perspective', () => {

@@ -1,10 +1,23 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { DEFAULT_ACCURACY_MODEL, type AccuracyModel } from '@/core/accuracyModel';
 import { recommendPreset, type PresetId } from '@/engine/presets';
 
 export type Platform = 'chesscom' | 'lichess';
-export type ThemeSetting = 'system' | 'dark' | 'light';
-export type BoardTheme = 'slate' | 'walnut' | 'ocean';
+export type ThemeSetting = 'classic' | 'system' | 'dark' | 'light';
+export type BoardTheme = 'green' | 'slate' | 'walnut' | 'ocean';
+
+/** Defaults for new users. index.html's no-flash script applies the same ones. */
+export const DEFAULT_THEME: ThemeSetting = 'classic';
+export const DEFAULT_BOARD: BoardTheme = 'green';
+/** Board that goes with each theme; picking a theme in Settings switches to it. */
+export const THEME_BOARD: Partial<Record<ThemeSetting, BoardTheme>> = { classic: 'green' };
+
+/**
+ * Version of the persisted settings. 2: classic theme and green board became the defaults.
+ * 3: the accuracy scale became a setting (calibrated by default).
+ */
+export const SETTINGS_VERSION = 3;
 
 export interface RecentSearch {
   platform: Platform;
@@ -14,6 +27,8 @@ export interface RecentSearch {
 export interface SettingsState {
   /** 'auto' picks a preset for this device (see recommendPreset). */
   preset: 'auto' | PresetId;
+  /** The scale accuracies are shown on (core/accuracyModel.ts); labels do not depend on it. */
+  accuracyModel: AccuracyModel;
   theme: ThemeSetting;
   boardTheme: BoardTheme;
   showBestMoveArrow: boolean;
@@ -28,6 +43,29 @@ export interface SettingsState {
   /** Forgets one recent search (usernames match case-insensitively). */
   removeRecent: (search: RecentSearch) => void;
   clearRecent: () => void;
+}
+
+/**
+ * Upgrades settings saved by an older version, keeping every other field.
+ * - Version 2 changed the defaults: anyone still on the old ones (system theme, slate board)
+ *   moves to classic + green, while a theme or board someone picked themselves is kept.
+ * - Version 3 added the accuracy scale; everyone starts on the default (calibrated).
+ */
+export function migrateSettings(persisted: unknown, version: number): Partial<SettingsState> {
+  let state: Partial<SettingsState> =
+    persisted && typeof persisted === 'object' ? (persisted as Partial<SettingsState>) : {};
+  if (version >= SETTINGS_VERSION) return state;
+  if (version < 2) {
+    // Version 1 did not store a value it never had: missing means its default.
+    const theme = state.theme ?? 'system';
+    const boardTheme = state.boardTheme ?? 'slate';
+    state =
+      theme === 'system' && boardTheme === 'slate'
+        ? { ...state, theme: DEFAULT_THEME, boardTheme: DEFAULT_BOARD }
+        : { ...state, theme, boardTheme };
+  }
+  if (version < 3) state = { ...state, accuracyModel: DEFAULT_ACCURACY_MODEL };
+  return state;
 }
 
 const sameSearch = (a: RecentSearch, b: RecentSearch) =>
@@ -64,8 +102,9 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       preset: 'auto',
-      theme: 'system',
-      boardTheme: 'slate',
+      accuracyModel: DEFAULT_ACCURACY_MODEL,
+      theme: DEFAULT_THEME,
+      boardTheme: DEFAULT_BOARD,
       showBestMoveArrow: true,
       showEvalBar: true,
       showBoardBadges: true,
@@ -82,7 +121,12 @@ export const useSettings = create<SettingsState>()(
         set((state) => ({ recent: state.recent.filter((r) => !sameSearch(r, search)) })),
       clearRecent: () => set({ recent: [] }),
     }),
-    { name: 'kibitz-settings', version: 1, storage: createJSONStorage(() => safeStorage) },
+    {
+      name: 'kibitz-settings',
+      version: SETTINGS_VERSION,
+      migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsState,
+      storage: createJSONStorage(() => safeStorage),
+    },
   ),
 );
 

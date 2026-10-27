@@ -1,5 +1,6 @@
 import { CLASSIFICATION_META } from '@/components/classificationMeta';
 import type { Classification } from '@/core/types';
+import { cn } from '@/lib/cn';
 
 /**
  * Decorative illustration for the home page: a stylised eval graph with a few
@@ -95,7 +96,10 @@ function AccuracyTile({ side, value }: { side: 'white' | 'black'; value: string 
   return (
     <div className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
       <span
-        className="h-3 w-3 rounded-full ring-1 ring-line"
+        className={cn(
+          'h-3 w-3 rounded-full ring-1',
+          side === 'white' ? 'ring-black/25' : 'ring-white/30',
+        )}
         style={{ background: side === 'white' ? 'var(--eval-white)' : 'var(--eval-black)' }}
       />
       <span className="tabular text-lg font-bold text-text">{value}</span>

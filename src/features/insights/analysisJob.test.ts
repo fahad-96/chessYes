@@ -1,5 +1,6 @@
 import { Chess } from 'chess.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { AccuracyModel } from '@/core/accuracyModel';
 import type { GameRecord, PositionAnalysis } from '@/core/types';
 import type { AnalyzeRequest, Engine } from '@/engine/stockfish';
 import {
@@ -123,8 +124,14 @@ function waitForJob(predicate: (job: InsightsJob) => boolean): Promise<InsightsJ
 }
 
 const finished = (job: InsightsJob) => ['done', 'cancelled', 'failed'].includes(job.status);
-const start = (records: GameRecord[]) =>
-  startInsightsJob({ platform: 'lichess', username: 'drnykterstein', records, presetId: 'fast' });
+const start = (records: GameRecord[], accuracyModel: AccuracyModel = 'calibrated') =>
+  startInsightsJob({
+    platform: 'lichess',
+    username: 'drnykterstein',
+    records,
+    presetId: 'fast',
+    accuracyModel,
+  });
 
 beforeEach(async () => {
   resetInsightsJobForTests();
@@ -181,6 +188,32 @@ describe('insights analysis job', () => {
     expect((await getLibraryEntry('lichess/game0000'))?.perspective?.username).toBe(
       'drnykterstein',
     );
+  });
+
+  it('reviews games again when their accuracies are on another scale', async () => {
+    // White keeps a small edge, so the two scales give different accuracies.
+    const engine = fakeEngine({ score: (request) => (request.fen.includes(' w ') ? 60 : 20) });
+    setEngineFactoryForTests(() => engine);
+    start([record(0)]);
+    await waitForJob(finished);
+    const calibrated = (await getLibraryEntry('lichess/game0000'))!;
+    expect(calibrated.accuracyModel).toBe('calibrated');
+    engine.searches.length = 0;
+
+    start([record(0)], 'lichess');
+    const job = await waitForJob(finished);
+    expect(job).toMatchObject({ status: 'done', queued: 1, skipped: 0, analysed: 1 });
+    // Rebuilt from the analysis cache: no new searches.
+    expect(engine.searches).toHaveLength(0);
+    const lichess = (await getLibraryEntry('lichess/game0000'))!;
+    expect(lichess.accuracyModel).toBe('lichess');
+    expect(lichess.white.accuracy).not.toBe(calibrated.white.accuracy);
+    expect(lichess.moves.map((move) => move.classification)).toEqual(
+      calibrated.moves.map((move) => move.classification),
+    );
+
+    start([record(0)], 'lichess');
+    expect(await waitForJob(finished)).toMatchObject({ queued: 0, skipped: 1 });
   });
 
   it('can be cancelled and resumes from the analysis cache', async () => {

@@ -1,4 +1,3 @@
-import { moveAccuracy } from '@/core/accuracy';
 import { PIECE_VALUES } from '@/core/thresholds';
 import type { Classification, Color, GameRecord, TimeClass } from '@/core/types';
 import { outcomeForPlayer, playerColor, type PlayerOutcome } from '@/features/games/gameList';
@@ -379,7 +378,7 @@ export interface PlayerEntry {
  * player, otherwise from the names (reviews opened without a perspective count too).
  */
 export function entryColor(
-  entry: LibraryEntry,
+  entry: Pick<LibraryEntry, 'record' | 'perspective'>,
   platform: Platform,
   username: string,
 ): Color | null {
@@ -526,8 +525,9 @@ export interface PhaseStat {
 export type PhaseAccuracy = Record<Phase, { you: PhaseStat; opponents: PhaseStat }>;
 
 /**
- * Accuracy per phase: the mean of moveAccuracy(winBefore, winAfter) over the moves played
- * in that phase (a plain mean, unlike game accuracy, so phases of any length compare).
+ * Accuracy per phase: the mean of the move accuracies (on the entries' accuracy scale) over
+ * the moves played in that phase (a plain mean, unlike game accuracy, so phases of any
+ * length compare).
  */
 export function phaseAccuracy(entries: readonly PlayerEntry[]): PhaseAccuracy {
   const sums = Object.fromEntries(
@@ -538,8 +538,7 @@ export function phaseAccuracy(entries: readonly PlayerEntry[]): PhaseAccuracy {
     for (const move of entry.moves) {
       moveNumbers[move.color] += 1;
       const phase = phaseOf(move, moveNumbers[move.color]);
-      const accuracy = moveAccuracy(move.winBefore, move.winAfter);
-      sums[phase][move.color === color ? 'you' : 'opponents'].push(accuracy);
+      sums[phase][move.color === color ? 'you' : 'opponents'].push(move.accuracy);
     }
   }
   const stat = (values: number[]): PhaseStat => ({ accuracy: mean(values), moves: values.length });
@@ -575,7 +574,7 @@ export interface TimeTroubleStats {
   /** Player moves with a known clock. */
   moves: number;
   troubleMoves: number;
-  /** Mistakes, blunders and missed wins made in time trouble / with time to spare. */
+  /** Mistakes, blunders and misses made in time trouble / with time to spare. */
   troubleErrors: number;
   calmErrors: number;
   /** Errors per 100 moves, or null without moves in that state. */
@@ -586,8 +585,8 @@ export interface TimeTroubleStats {
 /**
  * Mistakes made in time trouble, from the clock comments in the PGN. A move counts as played
  * in time trouble when the clock after it (the time the player had left when they moved)
- * is below TIME_TROUBLE_SHARE of the starting time. Missed wins count as errors too: they
- * are mistakes or blunders that threw away a winning position.
+ * is below TIME_TROUBLE_SHARE of the starting time. Misses count as errors too: each
+ * one let a real chance slip.
  */
 export function timeTrouble(entries: readonly PlayerEntry[]): TimeTroubleStats {
   const stats: TimeTroubleStats = {
