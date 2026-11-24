@@ -8,7 +8,7 @@ import type { Logger, Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 // BASE_PATH lets the same build run at a domain root or under a sub-path
-// such as GitHub Pages (https://<user>.github.io/kibitz-chess/).
+// such as GitHub Pages (https://<user>.github.io/chessYes/).
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
   plugins: [react(), tailwindcss(), serviceWorker()],

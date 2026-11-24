@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea for Kibitz
+description: Suggest an idea for Chess Yes
 labels: [enhancement]
 body:
   - type: textarea
