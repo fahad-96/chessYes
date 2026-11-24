@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import { pageTitle } from '@/app/seo';
 import { cn } from '@/lib/cn';
 import type { LibraryEntry } from '@/library/library';
 import { getInteractiveEngine } from '@/practice/interactiveEngine';
@@ -87,7 +88,7 @@ function isThemeFilter(value: string | null): value is ThemeFilter {
 
 /** /puzzles: puzzles built from the mistakes in the player's reviewed games. */
 export default function PuzzlesPage() {
-  useDocumentTitle('Puzzles · Chess Yes');
+  useDocumentTitle(pageTitle('/puzzles'));
   const { entries, outdated, progress, activity, record } = usePuzzleData();
   const [params, setParams] = useSearchParams();
 
@@ -523,8 +524,13 @@ function PuzzlesSkeleton() {
       <span className="sr-only" role="status">
         Loading puzzles
       </span>
-      <Skeleton className="h-8 w-40" />
-      <Skeleton className="mt-2 h-4 w-72 max-w-full" />
+      {/* The heading is real text while loading: the prerendered page (and search engines) show it. */}
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Puzzles</h1>
+      <p className="mt-1 text-sm text-muted">
+        Positions from your reviewed games where you went wrong. Find the move you missed: every
+        mistake, blunder and miss becomes a puzzle, and the ones you get wrong come back until they
+        stick.
+      </p>
       <Skeleton className="mt-4 h-14 w-full lg:hidden" />
       <div className="mt-4 flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-6">
         <Skeleton className="aspect-square w-full md:mx-auto md:max-w-[max(20rem,calc(100dvh-26rem))] lg:max-w-[calc(100dvh-14rem)]" />

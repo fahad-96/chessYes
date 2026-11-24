@@ -8,20 +8,34 @@
     <meta name="color-scheme" content="dark light" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <!--
+      Search and link-preview tags. scripts/prerender.mjs rewrites the title, description,
+      robots, canonical and og:title/description/url of each page from src/app/seo.ts.
+    -->
     <meta
       name="description"
-      content="Chess Yes is a free, open-source chess game review. Stockfish runs in your browser: move classifications, accuracy, eval graph and plain-English explanations."
+      content="Review your Chess.com and Lichess games for free: every move classified from Brilliant to Blunder, accuracy, an eval graph and plain-English explanations."
     />
-    <title>Chess Yes · Free chess game review</title>
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <title>Chess Yes: Free Chess Game Review with Stockfish</title>
     <link rel="canonical" href="https://chessyes.in/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Chess Yes" />
-    <meta property="og:title" content="Chess Yes · Free chess game review" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="Chess Yes: Free Chess Game Review with Stockfish" />
     <meta
       property="og:description"
-      content="Every move classified and explained, accuracy for both players and an eval graph. Stockfish runs in your browser: free, no account."
+      content="Review your Chess.com and Lichess games for free: every move classified from Brilliant to Blunder, accuracy, an eval graph and plain-English explanations."
     />
     <meta property="og:url" content="https://chessyes.in/" />
+    <meta property="og:image" content="https://chessyes.in/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Chess Yes: free chess game review. A chessboard with an evaluation graph."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="author" content="Fahad Yousuf" />
     <script>
       // Apply the saved theme before the app loads so the page never flashes in the wrong

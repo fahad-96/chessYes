@@ -14,9 +14,12 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import { pageTitle } from '@/app/seo';
 import { useSettings, type Platform } from '@/state/settings';
 import { ClassificationLegend } from './ClassificationLegend';
 import { HeroPreview } from './HeroPreview';
+import { HomeFaq } from './HomeFaq';
 import { PLATFORM_LABELS, parseUsernameInput, playerPath, validateUsername } from './username';
 
 const PLATFORM_OPTIONS = [
@@ -24,7 +27,13 @@ const PLATFORM_OPTIONS = [
   { value: 'lichess', label: PLATFORM_LABELS.lichess },
 ] as const;
 
-const FEATURES = [
+const FEATURES: {
+  icon: typeof ListChecks;
+  title: string;
+  body: string;
+  /** In-app page the card links to. */
+  to?: string;
+}[] = [
   {
     icon: ListChecks,
     title: 'Every move classified',
@@ -36,6 +45,12 @@ const FEATURES = [
     body: 'Accuracy for both players and an evaluation graph that shows exactly where the game turned.',
   },
   {
+    icon: Swords,
+    title: 'Play Stockfish',
+    body: 'Play a game against Stockfish at eight strengths, from beginner to full strength, then review it in one click.',
+    to: '/play',
+  },
+  {
     icon: ShieldCheck,
     title: 'Private by design',
     body: 'Stockfish runs on your device. No account and no tracking: your games and analyses stay in your browser.',
@@ -44,6 +59,7 @@ const FEATURES = [
 
 /** Landing page: username search, recent searches and a short pitch. */
 export default function HomePage() {
+  useDocumentTitle(pageTitle('/'));
   return (
     <div className="space-y-12 pb-6 sm:space-y-16 sm:pt-6">
       <section className="grid items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
@@ -71,14 +87,23 @@ export default function HomePage() {
         <h2 id="features-heading" className="sr-only">
           Features
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-3">
-          {FEATURES.map(({ icon: Icon, title, body }) => (
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {FEATURES.map(({ icon: Icon, title, body, to }) => (
             <li key={title}>
-              <Card className="h-full p-5">
+              <Card className="relative h-full p-5">
                 <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent">
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
-                <h3 className="font-semibold">{title}</h3>
+                <h3 className="font-semibold">
+                  {to ? (
+                    // The whole card is the link's target (the ::after covers it).
+                    <Link to={to} className="after:absolute after:inset-0 hover:text-brand">
+                      {title}
+                    </Link>
+                  ) : (
+                    title
+                  )}
+                </h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted">{body}</p>
               </Card>
             </li>
@@ -87,6 +112,8 @@ export default function HomePage() {
       </section>
 
       <ClassificationLegend />
+
+      <HomeFaq />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import { pageTitle } from '@/app/seo';
 import { isReviewable, reviewPath } from '@/features/games/gameList';
 import { cn } from '@/lib/cn';
 import { recordFromPgn, savePgnGame } from '@/sources/pgnImport';
@@ -30,7 +31,7 @@ interface Candidate {
 
 /** /import: paste or upload a PGN and review it. */
 export default function ImportPage() {
-  useDocumentTitle('Import PGN · Chess Yes');
+  useDocumentTitle(pageTitle('/import'));
   const navigate = useNavigate();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);

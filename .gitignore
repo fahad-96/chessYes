@@ -15,3 +15,6 @@ public/engine
 # The coach voice pack, installed by scripts/fetch-voice.mjs (see voice-pack.json)
 public/voice-pack/
 public/voice-pack.partial/
+
+# Server bundle for prerendering (scripts/prerender.mjs), removed after the build
+.ssr

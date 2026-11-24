@@ -1,55 +1,15 @@
-import { lazy, Suspense } from 'react';
-import { createHashRouter, RouterProvider } from 'react-router-dom';
-import { Spinner } from '@/components/ui/Spinner';
-import { Layout } from './Layout';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { basenameFor, routes } from './routes';
 
-// Hash routing keeps the app fully static: no server rewrites needed on GitHub Pages.
-const HomePage = lazy(() => import('@/features/home/HomePage'));
-const GamesPage = lazy(() => import('@/features/games/GamesPage'));
-const ReviewPage = lazy(() => import('@/features/review/ReviewPage'));
-const InsightsPage = lazy(() => import('@/features/insights/InsightsPage'));
-const PuzzlesPage = lazy(() => import('@/features/puzzles/PuzzlesPage'));
-const PlayPage = lazy(() => import('@/features/play/PlayPage'));
-const ImportPage = lazy(() => import('@/features/import/ImportPage'));
-const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
-const AboutPage = lazy(() => import('@/features/about/AboutPage'));
-const NotFoundPage = lazy(() => import('@/features/about/NotFoundPage'));
-
-function PageFallback() {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center text-muted">
-      <Spinner />
-    </div>
-  );
-}
-
-const page = (element: React.ReactNode) => (
-  <Suspense fallback={<PageFallback />}>{element}</Suspense>
-);
-
-const router = createHashRouter([
-  {
-    element: <Layout />,
-    children: [
-      { path: '/', element: page(<HomePage />) },
-      /** Game list: /player/chesscom/hikaru or /player/lichess/DrNykterstein */
-      { path: '/player/:platform/:username', element: page(<GamesPage />) },
-      /** Review: /review/<GameRecord.id>, e.g. /review/lichess/HqjDTU4A */
-      { path: '/review/*', element: page(<ReviewPage />) },
-      /** Insights across many games: /insights/chesscom/hikaru */
-      { path: '/insights/:platform/:username', element: page(<InsightsPage />) },
-      /** Puzzles built from your own mistakes. */
-      { path: '/puzzles', element: page(<PuzzlesPage />) },
-      /** A game against Stockfish at a chosen strength, then its review. */
-      { path: '/play', element: page(<PlayPage />) },
-      { path: '/import', element: page(<ImportPage />) },
-      { path: '/settings', element: page(<SettingsPage />) },
-      { path: '/about', element: page(<AboutPage />) },
-      { path: '*', element: page(<NotFoundPage />) },
-    ],
-  },
-]);
+/**
+ * Real paths (/play, /review/lichess/abc), not #/ fragments: search engines index each page
+ * under its own URL. The host serves the prerendered page for public routes and index.html
+ * for the rest (netlify.toml). The router is created on first render, after main.tsx has
+ * turned an old #/ link into a path.
+ */
+let router: ReturnType<typeof createBrowserRouter> | null = null;
 
 export function App() {
+  router ??= createBrowserRouter(routes, { basename: basenameFor(import.meta.env.BASE_URL) });
   return <RouterProvider router={router} />;
 }

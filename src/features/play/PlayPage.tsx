@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { SegmentedControl, type SegmentedOption } from '@/components/ui/SegmentedControl';
 import { Spinner } from '@/components/ui/Spinner';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import { pageTitle } from '@/app/seo';
 import type { Color } from '@/core/types';
 import { reviewPath } from '@/features/games/gameList';
 import { PlayerStrip } from '@/features/review/PlayerStrip';
@@ -29,7 +30,7 @@ const toOrientation = (color: Color): BoardOrientation => (color === 'w' ? 'whit
 
 /** Play a game against Stockfish at one of eight strengths, then review it. */
 export default function PlayPage() {
-  useDocumentTitle('Play Stockfish · Chess Yes');
+  useDocumentTitle(pageTitle('/play'));
   const play = usePlayGame();
   if (!play.game || !play.position) {
     return <SetupScreen setup={play.setup} onStart={(setup) => play.start(setup)} />;
@@ -122,6 +123,31 @@ function SetupScreen({
         Stockfish runs on your device. The game is saved in this browser, so you can leave and come
         back to it.
       </p>
+      <section aria-labelledby="levels-heading" className="mt-4">
+        <h2 id="levels-heading" className="text-lg font-bold tracking-tight">
+          The eight levels
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">
+          Every level is Stockfish 19 running in your browser. Lower levels search less deeply and
+          sometimes pick a weaker move from among the engine&rsquo;s best candidates, so they make
+          the kind of mistakes people make instead of random ones. Level 8 always plays the best
+          move it finds. Take back a move whenever you like, and when the game ends, review it to
+          see where it was won and lost.
+        </p>
+        <ol className="mt-3 grid gap-2 sm:grid-cols-2">
+          {ENGINE_LEVELS.map((option) => (
+            <li
+              key={option.id}
+              className="rounded-xl border border-glass-border bg-hover px-3 py-2 text-sm leading-snug"
+            >
+              <span className="font-semibold">
+                {option.id}. {option.name}.
+              </span>{' '}
+              <span className="text-muted">{option.blurb}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
     </div>
   );
 }
