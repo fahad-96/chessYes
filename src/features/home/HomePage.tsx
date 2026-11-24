@@ -77,7 +77,7 @@ export default function HomePage() {
         <div className="flex justify-center px-5 pb-8 sm:pb-10">
           <Link
             to="/home"
-            className="inline-flex h-14 min-w-44 items-center justify-center rounded-full bg-white px-10 text-lg font-bold tracking-[0.28em] text-[#1c1b19] uppercase shadow-[0_12px_40px_-12px_rgb(0_0_0/0.7)] transition-[transform,background-color] hover:bg-[#f3f1ec] active:scale-[0.98] sm:h-16 sm:min-w-52"
+            className="kb-start inline-flex h-14 min-w-44 items-center justify-center rounded-full px-10 text-lg font-bold tracking-[0.28em] uppercase sm:h-16 sm:min-w-52"
           >
             Start
           </Link>
