@@ -36,6 +36,13 @@ export interface SettingsState {
   /** Draw the classification badge on the destination square of the current move. */
   showBoardBadges: boolean;
   recent: RecentSearch[];
+  /**
+   * The player's own Chess.com or Lichess account, connected once on /home and remembered,
+   * so their games open without typing the username again. Only the public username.
+   */
+  account: RecentSearch | null;
+  /** They chose to use the app without connecting an account: /home stops asking. */
+  skippedConnect: boolean;
   set: (
     patch: Partial<Omit<SettingsState, 'set' | 'addRecent' | 'removeRecent' | 'clearRecent'>>,
   ) => void;
@@ -109,6 +116,8 @@ export const useSettings = create<SettingsState>()(
       showEvalBar: true,
       showBoardBadges: true,
       recent: [],
+      account: null,
+      skippedConnect: false,
       set: (patch) => set(patch),
       addRecent: (search) =>
         set((state) => ({

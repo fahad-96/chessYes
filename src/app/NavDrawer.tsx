@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ComponentType } from 'react';
-import { FileUp, Info, Puzzle, ScanSearch, Settings, Swords, X } from 'lucide-react';
+import { FileUp, House, Info, Puzzle, Settings, Swords, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GithubIcon } from '@/components/ui/GithubIcon';
 import { Logo } from '@/components/ui/Logo';
@@ -23,12 +23,16 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Chess',
     items: [
       {
-        to: '/',
-        label: 'Review',
-        description: 'Look up your games and review them',
-        icon: ScanSearch,
-        // The review flow starts at home, so game lists and reviews count as "Review".
-        matches: (p) => p === '/' || p.startsWith('/player/') || p.startsWith('/review/'),
+        to: '/home',
+        label: 'Home',
+        description: 'Your games, ready to review',
+        icon: House,
+        // Game lists, reviews and insights start from home, so they count as "Home".
+        matches: (p) =>
+          p === '/home' ||
+          p.startsWith('/player/') ||
+          p.startsWith('/review/') ||
+          p.startsWith('/insights/'),
       },
       {
         to: '/play',
@@ -126,7 +130,12 @@ export function NavDrawer({ open, onClose, pathname }: NavDrawerProps) {
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between gap-2 py-3 pr-3 pl-4">
-          <Link to="/" onClick={onClose} aria-label="Chess Yes home" className="rounded-lg py-1">
+          <Link
+            to="/home"
+            onClick={onClose}
+            aria-label="Chess Yes home"
+            className="rounded-lg py-1"
+          >
             <Logo />
           </Link>
           <button

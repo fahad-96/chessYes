@@ -124,7 +124,7 @@ describe('PuzzlesPage', () => {
     expect(screen.getByRole('link', { name: /Analyse my recent games/ }).getAttribute('href')).toBe(
       '/insights/chesscom/Hikaru',
     );
-    expect(screen.getByRole('link', { name: /Find my games/ }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: /Find my games/ }).getAttribute('href')).toBe('/home');
     expect(screen.queryByText(/need a fresh review/)).toBeNull();
   });
 

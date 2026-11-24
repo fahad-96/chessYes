@@ -11,7 +11,8 @@ function renderAt(path: string) {
       {
         element: <Layout />,
         children: [
-          { path: '/', element: <p>Home page</p> },
+          { path: '/', element: <p>Landing page</p> },
+          { path: '/home', element: <p>Home page</p> },
           { path: '/play', element: <p>Play page</p> },
           { path: '/puzzles', element: <p>Puzzles page</p> },
           { path: '/review/*', element: <p>Review page</p> },
@@ -35,9 +36,11 @@ afterEach(cleanup);
 
 describe('currentNavItem', () => {
   it('finds the section of a path', () => {
-    expect(currentNavItem('/')?.label).toBe('Review');
-    expect(currentNavItem('/review/lichess/abc')?.label).toBe('Review');
-    expect(currentNavItem('/player/chesscom/hikaru')?.label).toBe('Review');
+    expect(currentNavItem('/home')?.label).toBe('Home');
+    expect(currentNavItem('/review/lichess/abc')?.label).toBe('Home');
+    expect(currentNavItem('/player/chesscom/hikaru')?.label).toBe('Home');
+    expect(currentNavItem('/insights/lichess/abc')?.label).toBe('Home');
+    expect(currentNavItem('/')).toBeNull();
     expect(currentNavItem('/play')?.label).toBe('Play');
     expect(currentNavItem('/settings')?.label).toBe('Settings');
     expect(currentNavItem('/nowhere')).toBeNull();
@@ -45,7 +48,7 @@ describe('currentNavItem', () => {
 
   it('lists every section once', () => {
     const paths = NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.to));
-    expect(paths).toEqual(['/', '/play', '/puzzles', '/import', '/settings', '/about']);
+    expect(paths).toEqual(['/home', '/play', '/puzzles', '/import', '/settings', '/about']);
   });
 });
 
@@ -70,7 +73,7 @@ describe('the header menu', () => {
   });
 
   it('closes with the close button and on the backdrop', () => {
-    renderAt('/');
+    renderAt('/home');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     fireEvent.click(screen.getByRole('button', { name: 'Close menu', hidden: true }));
     expect(drawer().open).toBe(false);
@@ -82,7 +85,7 @@ describe('the header menu', () => {
   });
 
   it('navigates and closes when a link is picked', async () => {
-    const router = renderAt('/');
+    const router = renderAt('/home');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const puzzles = [...drawer().querySelectorAll('nav a')].find((link) =>
       link.textContent?.startsWith('Puzzles'),
@@ -96,7 +99,7 @@ describe('the header menu', () => {
   });
 
   it('closes when the page changes from elsewhere (back, forward)', async () => {
-    const router = renderAt('/');
+    const router = renderAt('/home');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     await act(async () => {
       await router.navigate('/play');

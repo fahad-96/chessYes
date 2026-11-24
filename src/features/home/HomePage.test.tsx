@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Layout } from '@/app/Layout';
 import { useSettings } from '@/state/settings';
 import HomePage from './HomePage';
-
-function PlayerProbe() {
-  const { platform, username } = useParams();
-  return <p>player page: {`${platform}/${username}`}</p>;
-}
 
 function renderApp(path = '/') {
   const router = createMemoryRouter(
@@ -18,7 +13,8 @@ function renderApp(path = '/') {
         element: <Layout />,
         children: [
           { path: '/', element: <HomePage /> },
-          { path: '/player/:platform/:username', element: <PlayerProbe /> },
+          { path: '/home', element: <p>Home page</p> },
+          { path: '/about', element: <p>About page</p> },
         ],
       },
     ],
@@ -31,7 +27,7 @@ function renderApp(path = '/') {
 beforeEach(() => {
   // jsdom has no scrolling; ScrollRestoration calls window.scrollTo on navigation.
   vi.stubGlobal('scrollTo', vi.fn());
-  useSettings.setState({ recent: [], theme: 'system', boardTheme: 'slate' });
+  useSettings.setState({ recent: [], theme: 'system', boardTheme: 'slate', account: null });
 });
 
 afterEach(() => {
@@ -41,9 +37,35 @@ afterEach(() => {
   delete document.documentElement.dataset.board;
 });
 
+describe('landing page', () => {
+  it('is a single screen: the headline and one way in, without the app chrome', () => {
+    renderApp();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Every move,explained.');
+    expect(screen.getByText('Free chess game review')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Start' }).getAttribute('href')).toBe('/home');
+    // No app header, menu or footer on the landing page.
+    expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull();
+    expect(screen.queryByText(/Not affiliated with Chess\.com or Lichess\./)).toBeNull();
+  });
+
+  it('links to the main pages at the foot', () => {
+    renderApp();
+    const nav = screen.getByRole('navigation', { name: 'Chess Yes' });
+    const hrefs = [...nav.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(['/home', '/import', '/play', '/puzzles', '/about#faq', '/about']);
+  });
+
+  it('starts the app with Start', () => {
+    const router = renderApp();
+    fireEvent.click(screen.getByRole('link', { name: 'Start' }));
+    expect(router.state.location.pathname).toBe('/home');
+    expect(screen.getByText('Home page')).toBeTruthy();
+  });
+});
+
 describe('app shell', () => {
   it('shows the footer disclaimer and applies theme settings to <html>', () => {
-    renderApp();
+    renderApp('/about');
     expect(screen.getByText(/Not affiliated with Chess\.com or Lichess\./)).toBeTruthy();
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(document.documentElement.dataset.board).toBe('slate');
@@ -56,63 +78,31 @@ describe('app shell', () => {
     expect(document.documentElement.dataset.theme).toBeUndefined();
   });
 
-  it('marks the Review nav item as current on the home page', () => {
-    renderApp();
-    // The header names the section; the links themselves are in the menu.
-    expect(screen.getByRole('button', { name: 'Review: open menu' })).toBeTruthy();
+  it('marks Home as current in the menu and the sidebar on /home', () => {
+    renderApp('/home');
+    expect(screen.getByRole('button', { name: 'Home: open menu' })).toBeTruthy();
+    // The sidebar (large screens) marks the current page too.
+    const sidebarCurrent = document.querySelector('aside [aria-current="page"]');
+    expect(sidebarCurrent?.textContent).toContain('Home');
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    const current = screen.getByRole('link', { current: 'page' });
-    expect(current.textContent).toContain('Review');
-  });
-});
-
-describe('home search', () => {
-  it('rejects invalid usernames with a readable message', () => {
-    renderApp();
-    const input = screen.getByLabelText('Chess.com username');
-    fireEvent.change(input, { target: { value: 'ab' } });
-    fireEvent.click(screen.getByRole('button', { name: /find games/i }));
-    expect(screen.getByRole('alert').textContent).toMatch(/3 to 25 characters/);
-    expect(input.getAttribute('aria-invalid')).toBe('true');
+    const current = document.querySelector('#nav-drawer [aria-current="page"]');
+    expect(current?.textContent).toContain('Home');
   });
 
-  it('navigates to the player page and remembers the search', () => {
-    const router = renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: 'Lichess' }));
-    fireEvent.change(screen.getByLabelText('Lichess username'), {
-      target: { value: ' DrNykterstein ' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /find games/i }));
-    expect(router.state.location.pathname).toBe('/player/lichess/DrNykterstein');
-    expect(screen.getByText('player page: lichess/DrNykterstein')).toBeTruthy();
-    expect(useSettings.getState().recent[0]).toEqual({
-      platform: 'lichess',
-      username: 'DrNykterstein',
-    });
+  it('switches between light and dark from the sidebar', () => {
+    useSettings.setState({ theme: 'classic' });
+    renderApp('/home');
+    fireEvent.click(screen.getByRole('button', { name: 'Light mode' }));
+    expect(useSettings.getState().theme).toBe('light');
+    fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+    expect(useSettings.getState().theme).toBe('classic');
   });
 
-  it('switches platform when a profile URL is pasted', () => {
-    const router = renderApp();
-    fireEvent.change(screen.getByLabelText('Chess.com username'), {
-      target: { value: 'https://lichess.org/@/thibault' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /find games/i }));
-    expect(router.state.location.pathname).toBe('/player/lichess/thibault');
-  });
-
-  it('lists recent searches and removes one', () => {
-    useSettings.setState({
-      recent: [
-        { platform: 'chesscom', username: 'hikaru' },
-        { platform: 'lichess', username: 'thibault' },
-      ],
-    });
-    renderApp();
-    expect(screen.getByRole('link', { name: /hikaru/ }).getAttribute('href')).toBe(
-      '/player/chesscom/hikaru',
-    );
-    fireEvent.click(screen.getByRole('button', { name: /Remove hikaru/ }));
-    expect(useSettings.getState().recent).toEqual([{ platform: 'lichess', username: 'thibault' }]);
-    expect(screen.queryByRole('link', { name: /hikaru/ })).toBeNull();
+  it('shows the connected account in the sidebar', () => {
+    useSettings.setState({ account: { platform: 'lichess', username: 'thibault' } });
+    renderApp('/home');
+    const link = document.querySelector('aside a[href="/home?connect"]');
+    expect(link?.textContent).toContain('thibault');
+    expect(link?.textContent).toContain('Lichess');
   });
 });

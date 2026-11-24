@@ -30,6 +30,20 @@ export const PAGES: readonly PageSeo[] = [
     indexable: true,
   },
   {
+    path: '/home',
+    title: 'Home · Chess Yes',
+    description:
+      'Your Chess.com or Lichess games, ready to review with Stockfish: ratings, results and accuracy at a glance.',
+    indexable: false,
+  },
+  {
+    path: '/train',
+    title: 'Analyze My Recent Games · Chess Yes',
+    description:
+      'Chess Yes analyses your latest Chess.com or Lichess games with Stockfish and turns your mistakes into puzzles.',
+    indexable: false,
+  },
+  {
     path: '/play',
     title: 'Play Chess Against Stockfish Online, Free · Chess Yes',
     description:
@@ -116,20 +130,26 @@ export function headTagsForPath(pathname: string): HeadTags {
 }
 
 /**
- * Structured data for the home page: the site's name (what search results show for it),
- * the app itself, and the questions and answers on the page.
+ * Structured data for a page. The landing page names the site (what search results show for
+ * it) and describes the app; the About page, which shows the questions and answers, marks
+ * them up as an FAQ. Other pages have none.
  */
-export function structuredData(): object[] {
+export function structuredDataFor(path: string): object[] {
+  if (path === '/about') {
+    return [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: FAQ.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: { '@type': 'Answer', text: item.answer },
+        })),
+      },
+    ];
+  }
+  if (path !== '/') return [];
   return [
-    {
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      mainEntity: FAQ.map((item) => ({
-        '@type': 'Question',
-        name: item.question,
-        acceptedAnswer: { '@type': 'Answer', text: item.answer },
-      })),
-    },
     {
       '@context': 'https://schema.org',
       '@type': 'WebSite',

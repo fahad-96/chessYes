@@ -1,254 +1,106 @@
-import { useId, useRef, useState, type FormEvent } from 'react';
-import {
-  ArrowRight,
-  ChartLine,
-  ClipboardPaste,
-  History,
-  ListChecks,
-  ShieldCheck,
-  Swords,
-  X,
-} from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Link } from 'react-router-dom';
+import heroUrl from '@/assets/brand/hero-chess.webp';
+import { GithubIcon } from '@/components/ui/GithubIcon';
+import { LogoMark } from '@/components/ui/Logo';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
 import { pageTitle } from '@/app/seo';
-import { useSettings, type Platform } from '@/state/settings';
-import { ClassificationLegend } from './ClassificationLegend';
-import { HeroPreview } from './HeroPreview';
-import { HomeFaq } from './HomeFaq';
-import { PLATFORM_LABELS, parseUsernameInput, playerPath, validateUsername } from './username';
+import { REPO_URL } from '@/features/about/links';
 
-const PLATFORM_OPTIONS = [
-  { value: 'chesscom', label: PLATFORM_LABELS.chesscom },
-  { value: 'lichess', label: PLATFORM_LABELS.lichess },
+/** The quiet row of links at the foot of the landing page (also how search engines find the app). */
+const FOOT_LINKS = [
+  { to: '/home', label: 'Free game review' },
+  { to: '/import', label: 'PGN analysis' },
+  { to: '/play', label: 'Play Stockfish' },
+  { to: '/puzzles', label: 'Puzzles' },
+  { to: '/about#faq', label: 'FAQ' },
+  { to: '/about', label: 'About' },
 ] as const;
 
-const FEATURES: {
-  icon: typeof ListChecks;
-  title: string;
-  body: string;
-  /** In-app page the card links to. */
-  to?: string;
-}[] = [
-  {
-    icon: ListChecks,
-    title: 'Every move classified',
-    body: 'From Brilliant to Blunder, each move is judged by how much it changed your winning chances, with the best move and a plain-English explanation.',
-  },
-  {
-    icon: ChartLine,
-    title: 'Accuracy and eval graph',
-    body: 'Accuracy for both players and an evaluation graph that shows exactly where the game turned.',
-  },
-  {
-    icon: Swords,
-    title: 'Play Stockfish',
-    body: 'Play a game against Stockfish at eight strengths, from beginner to full strength, then review it in one click.',
-    to: '/play',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Private by design',
-    body: 'Stockfish runs on your device. No account and no tracking: your games and analyses stay in your browser.',
-  },
-];
-
-/** Landing page: username search, recent searches and a short pitch. */
+/**
+ * The landing page: one screen, the photo, the headline and a single way in. Everything else
+ * lives in the app behind "Get started" (/home). Layout renders this page without its header
+ * and footer. The hero is dark in every theme, so its text is always light.
+ */
 export default function HomePage() {
   useDocumentTitle(pageTitle('/'));
   return (
-    <div className="space-y-12 pb-6 sm:space-y-16 sm:pt-6">
-      <section className="grid items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
-        <div>
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
-            Free and open source
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-            Free chess game review
-          </h1>
-          <p className="mt-3 max-w-xl text-base text-pretty text-muted sm:text-lg">
-            Enter your username, pick a game, and see every move explained. Stockfish runs on your
-            device — no account, no paywall.
-          </p>
-          <SearchForm />
-          <RecentSearches />
-        </div>
-        <div className="hidden lg:block">
-          <HeroPreview />
-        </div>
-      </section>
+    <div className="kb-hero relative isolate flex min-h-[100svh] flex-col overflow-hidden text-white">
+      <img
+        src={heroUrl}
+        alt=""
+        fetchPriority="high"
+        decoding="async"
+        className="absolute inset-0 -z-20 h-full w-full object-cover object-[58%_40%]"
+      />
+      <div aria-hidden="true" className="kb-hero-scrim-left absolute inset-0 -z-10" />
 
-      <section aria-labelledby="features-heading">
-        <h2 id="features-heading" className="sr-only">
-          Features
-        </h2>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {FEATURES.map(({ icon: Icon, title, body, to }) => (
-            <li key={title}>
-              <Card className="relative h-full p-5">
-                <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <h3 className="font-semibold">
-                  {to ? (
-                    // The whole card is the link's target (the ::after covers it).
-                    <Link to={to} className="after:absolute after:inset-0 hover:text-brand">
-                      {title}
-                    </Link>
-                  ) : (
-                    title
-                  )}
-                </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted">{body}</p>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <ClassificationLegend />
-
-      <HomeFaq />
-    </div>
-  );
-}
-
-function SearchForm() {
-  const navigate = useNavigate();
-  const addRecent = useSettings((s) => s.addRecent);
-  const lastPlatform = useSettings((s) => s.recent[0]?.platform);
-  const [platform, setPlatform] = useState<Platform>(lastPlatform ?? 'chesscom');
-  const [value, setValue] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const inputId = useId();
-  const errorId = `${inputId}-error`;
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = parseUsernameInput(value);
-    // A pasted profile URL decides the platform.
-    const target = parsed.platform ?? platform;
-    if (target !== platform) setPlatform(target);
-    const problem = validateUsername(target, parsed.username);
-    if (problem) {
-      setError(problem);
-      inputRef.current?.focus();
-      return;
-    }
-    const username = parsed.username.trim();
-    addRecent({ platform: target, username });
-    navigate(playerPath(target, username));
-  }
-
-  return (
-    <form onSubmit={onSubmit} noValidate className="mt-6 max-w-xl">
-      <Card className="space-y-3 p-3 sm:p-4">
-        <SegmentedControl
-          label="Game site"
-          value={platform}
-          onChange={(next) => {
-            setPlatform(next);
-            setError(null);
-          }}
-          options={PLATFORM_OPTIONS}
-          fullWidth
-          className="sm:inline-flex sm:w-auto"
-        />
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            id={inputId}
-            ref={inputRef}
-            value={value}
-            onChange={(event) => {
-              setValue(event.target.value);
-              if (error) setError(null);
-            }}
-            placeholder={`${PLATFORM_LABELS[platform]} username`}
-            aria-label={`${PLATFORM_LABELS[platform]} username`}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? errorId : undefined}
-            autoComplete="off"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="go"
-            inputSize="xl"
-            className="sm:flex-1"
-          />
-          <Button type="submit" variant="primary" size="lg">
-            Find games
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>
-        {error && (
-          <p id={errorId} role="alert" className="text-sm text-danger">
-            {error}
-          </p>
-        )}
-      </Card>
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+      <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-7">
         <Link
-          to="/import"
-          className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted underline-offset-4 hover:text-text hover:underline"
+          to="/"
+          aria-label="Chess Yes home"
+          className="inline-flex items-center gap-3 rounded-lg"
         >
-          <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
-          Or paste a PGN
+          <LogoMark size={40} />
+          <span className="font-display text-[1.9rem] leading-none tracking-tight">
+            Chess <em className="text-[#9ed36a]">Yes</em>
+          </span>
         </Link>
-        <Link
-          to="/play"
-          className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted underline-offset-4 hover:text-text hover:underline"
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
-          <Swords className="h-4 w-4" aria-hidden="true" />
-          Or play Stockfish
-        </Link>
-      </div>
-    </form>
-  );
-}
+          <GithubIcon className="h-5 w-5" />
+          <span className="sr-only">Source code on GitHub</span>
+        </a>
+      </header>
 
-function RecentSearches() {
-  const recent = useSettings((s) => s.recent);
-  const addRecent = useSettings((s) => s.addRecent);
-  const remove = useSettings((s) => s.removeRecent);
-  if (recent.length === 0) return null;
-
-  return (
-    <div className="mt-6 max-w-xl">
-      <h2 className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted uppercase">
-        <History className="h-3.5 w-3.5" aria-hidden="true" />
-        Recent
-      </h2>
-      <ul className="flex flex-wrap gap-2">
-        {recent.map((r) => (
-          <li
-            key={`${r.platform}:${r.username}`}
-            className="inline-flex max-w-full items-center rounded-full border border-line bg-surface text-sm"
+      <main id="main" tabIndex={-1} className="flex flex-1 flex-col outline-none">
+        {/* The headline sits on the left, over the darker side of the photo. */}
+        <div className="mx-auto flex w-full max-w-7xl flex-1 items-center px-5 py-10 sm:px-8">
+          <div className="max-w-xl">
+            <p className="mb-6 text-xs font-medium tracking-[0.22em] text-white/70 uppercase">
+              Free chess game review
+            </p>
+            <h1 className="font-display text-[clamp(3.6rem,10vw,8rem)] leading-[0.9] tracking-[-0.02em] drop-shadow-[0_6px_40px_rgb(0_0_0/0.5)]">
+              Every move,
+              <br />
+              <em className="kb-display-accent">explained.</em>
+            </h1>
+            <p className="mt-6 max-w-sm text-base text-pretty text-white/80 sm:text-lg">
+              Stockfish in your browser. Your Chess.com and Lichess games, reviewed for free.
+            </p>
+          </div>
+        </div>
+        {/* One way in, centred low on the screen. */}
+        <div className="flex justify-center px-5 pb-8 sm:pb-10">
+          <Link
+            to="/home"
+            className="inline-flex h-14 min-w-44 items-center justify-center rounded-full bg-white px-10 text-lg font-bold tracking-[0.28em] text-[#1c1b19] uppercase shadow-[0_12px_40px_-12px_rgb(0_0_0/0.7)] transition-[transform,background-color] hover:bg-[#f3f1ec] active:scale-[0.98] sm:h-16 sm:min-w-52"
           >
-            <Link
-              to={playerPath(r.platform, r.username)}
-              onClick={() => addRecent(r)}
-              className="inline-flex h-10 min-w-0 items-center gap-2 rounded-l-full pr-1 pl-3 hover:text-accent sm:h-8"
-            >
-              <span className="truncate font-medium">{r.username}</span>
-              <span className="shrink-0 text-xs text-muted">{PLATFORM_LABELS[r.platform]}</span>
-            </Link>
-            <button
-              type="button"
-              onClick={() => remove(r)}
-              aria-label={`Remove ${r.username} (${PLATFORM_LABELS[r.platform]}) from recent searches`}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-text sm:mr-1 sm:h-6 sm:w-6"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </li>
-        ))}
-      </ul>
+            Start
+          </Link>
+        </div>
+      </main>
+
+      <footer className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-7">
+        <nav aria-label="Chess Yes">
+          <ul className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/70">
+            {FOOT_LINKS.map((link) => (
+              <li key={link.to}>
+                <Link to={link.to} className="transition-colors hover:text-white">
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+            <li aria-hidden="true" className="text-white/30">
+              ·
+            </li>
+            <li className="text-white/50">© {new Date().getFullYear()} Chess Yes</li>
+          </ul>
+        </nav>
+      </footer>
     </div>
   );
 }

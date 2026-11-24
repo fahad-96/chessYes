@@ -7,7 +7,7 @@ import { formatAccuracy, formatGameDate, formatTimeClass, formatTimeControl } fr
 import { isReviewable, outcomeForPlayer, reviewPath, sides, type PlayerOutcome } from './gameList';
 import { TIME_CLASS_ICONS } from './timeClassIcons';
 
-const OUTCOME_STYLES: Record<PlayerOutcome, { label: string; className: string }> = {
+export const OUTCOME_STYLES: Record<PlayerOutcome, { label: string; className: string }> = {
   win: { label: 'Win', className: 'bg-success/15 text-success' },
   loss: { label: 'Loss', className: 'bg-danger/15 text-danger' },
   draw: { label: 'Draw', className: 'bg-surface-3 text-muted' },

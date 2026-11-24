@@ -9,7 +9,14 @@ import { prerender } from 'react-dom/static';
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router-dom';
 import { basenameFor, routes } from './app/routes';
 
-export { PAGES, SITE_NAME, SITE_URL, headTagsForPath, pageTitle, structuredData } from './app/seo';
+export {
+  PAGES,
+  SITE_NAME,
+  SITE_URL,
+  headTagsForPath,
+  pageTitle,
+  structuredDataFor,
+} from './app/seo';
 
 /** The HTML inside <div id="root"> for `path` (relative to the site's base URL). */
 export async function renderPage(path: string, baseUrl = '/'): Promise<string> {

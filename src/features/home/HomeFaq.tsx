@@ -9,12 +9,17 @@ import { FAQ } from './faq';
  */
 export function HomeFaq() {
   return (
-    <section aria-labelledby="faq-heading">
-      <h2 id="faq-heading" className="text-xl font-bold tracking-tight">
-        Questions and answers
+    <section id="faq" aria-labelledby="faq-heading" className="scroll-mt-24">
+      <h2
+        id="faq-heading"
+        className="text-center font-display text-[clamp(2.4rem,5vw,3.5rem)] leading-tight tracking-[-0.01em]"
+      >
+        Questions, <em className="kb-display-accent">answered.</em>
       </h2>
-      <p className="mt-1 text-sm text-muted">About reviewing your chess games with Chess Yes.</p>
-      <Card className="mt-4 divide-y divide-glass-border">
+      <p className="mt-3 text-center text-muted">
+        About reviewing your chess games with Chess Yes.
+      </p>
+      <Card className="mt-8 divide-y divide-glass-border">
         {FAQ.map((item) => (
           <details key={item.question} className="group">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold transition-colors hover:text-brand [&::-webkit-details-marker]:hidden">
