@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
-import { FileUp, Info, Puzzle, ScanSearch, Settings } from 'lucide-react';
+import { FileUp, Info, Puzzle, ScanSearch, Settings, Swords } from 'lucide-react';
 import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { GithubIcon } from '@/components/ui/GithubIcon';
 import { Logo } from '@/components/ui/Logo';
@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
     // The review flow starts at home, so game lists and reviews count as "Review".
     matches: (p) => p === '/' || p.startsWith('/player/') || p.startsWith('/review/'),
   },
+  { to: '/play', label: 'Play', icon: Swords, matches: startsWith('/play') },
   { to: '/puzzles', label: 'Puzzles', icon: Puzzle, matches: startsWith('/puzzles') },
   {
     to: '/import',

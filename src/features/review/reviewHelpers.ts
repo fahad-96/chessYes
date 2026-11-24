@@ -456,6 +456,24 @@ export function initialOrientation(
 }
 
 /**
+ * The colour of the player named by the review URL's ?as=<name>, for any game, imported
+ * PGNs and games played in Chess Yes included (resolvePerspective covers only games from
+ * Chess.com and Lichess, whose reviews also go to that player's library). Names match
+ * case-insensitively; null when ?as= is missing, names neither player or names both.
+ */
+export function viewerColorFromSearch(
+  record: Pick<GameRecord, 'white' | 'black'>,
+  search: string,
+): Color | null {
+  const name = new URLSearchParams(search).get('as')?.trim().toLowerCase();
+  if (!name) return null;
+  const white = record.white.name.toLowerCase() === name;
+  const black = record.black.name.toLowerCase() === name;
+  if (white === black) return null;
+  return white ? 'w' : 'b';
+}
+
+/**
  * Who "you" are in a game: the player named by the review URL's ?as=<username>, or for
  * Chess.com ids (chesscom/<username>/...) the player whose archive the game came from.
  * Usernames match case-insensitively. Null for imported PGNs (no platform) and when no

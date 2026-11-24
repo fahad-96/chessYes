@@ -45,6 +45,7 @@ import {
   evalBarValueAt,
   evalTextAt,
   initialOrientation,
+  viewerColorFromSearch,
 } from './reviewHelpers';
 import { initialPly, pgnFileName, reviewLink } from './share';
 import { storyDuration, storyFrame, storyStart, storyTitle, storyTone } from './story';
@@ -209,14 +210,17 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const totalPlies = game.moves.length;
   const { analyses, analysis } = state;
-  const perspectiveColor = state.perspective?.color ?? null;
+  const location = useLocation();
+  // Imported and played games have no library perspective, but ?as=<name> still says
+  // which side is yours (games against Stockfish link here with ?as=You).
+  const perspectiveColor =
+    state.perspective?.color ?? viewerColorFromSearch(record, location.search);
   // The texts of the opponent's moves address the viewer ("You reply Rxg7+ and win their
   // pawn"); the exported PGN keeps the original wording (state.review).
   const review = useMemo(
     () => state.review && reviewForViewer(state.review, perspectiveColor),
     [state.review, perspectiveColor],
   );
-  const location = useLocation();
 
   // A shared link can open at a move: /review/<id>?ply=N.
   const [ply, setPly] = useState(() => initialPly(location.search, totalPlies));

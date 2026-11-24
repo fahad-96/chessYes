@@ -193,6 +193,9 @@ export const Board = memo(function Board({
       animation: { enabled: true, duration: 180 },
       highlight: { lastMove: true, check: true },
       drawable: { enabled: false, visible: true, brushes: BRUSHES },
+      // A board that lets one side move (puzzles, retries, Play) takes no moves on the
+      // other side's turn, rather than storing them as premoves nothing would play.
+      premovable: { enabled: false },
       movable: {
         free: false,
         showDests: true,
