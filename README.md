@@ -4,7 +4,7 @@
 
 Stockfish runs in your browser, so there is no account, no paywall and no server bill.
 
-**Live:** https://chessyes.netlify.app · Created and maintained by [Fahad Yousuf](https://fahad-yousuf.netlify.app/)
+**Live:** https://chessyes.in · Created and maintained by [Fahad Yousuf](https://fahad-yousuf.netlify.app/)
 
 > Chess Yes is an independent project. It is not affiliated with, endorsed by, or connected to Chess.com or Lichess.
 
