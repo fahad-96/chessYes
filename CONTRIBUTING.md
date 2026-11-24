@@ -7,8 +7,8 @@ Thanks for helping make free game review better for every chess player. This gui
 You need Node.js 20 or newer.
 
 ```bash
-git clone https://github.com/fahad-96/kibitz-chess.git
-cd kibitz-chess
+git clone https://github.com/fahad-96/chessYes.git
+cd chessYes
 npm install        # also copies Stockfish into public/engine and installs the voice pack into public/voice-pack
 npm run dev        # http://localhost:5173
 ```

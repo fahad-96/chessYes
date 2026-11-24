@@ -39,8 +39,8 @@ Every rule and threshold is documented in [docs/CLASSIFICATION.md](docs/CLASSIFI
 Requires Node.js 20+.
 
 ```bash
-git clone https://github.com/fahad-96/kibitz-chess.git
-cd kibitz-chess
+git clone https://github.com/fahad-96/chessYes.git
+cd chessYes
 npm install
 npm run dev
 ```
@@ -49,14 +49,14 @@ Then open http://localhost:5173.
 
 `npm install`, `npm run dev` and `npm run build` also install the coach voice pack (about 20 MB of clips, named in `voice-pack.json`) into `public/voice-pack/`. Without network access the step is skipped with a warning and the app speaks with the device's voice instead.
 
-`npm run build` produces a static site in `dist/` that any free static host can serve. Set `BASE_PATH` when serving from a sub-path, for example `BASE_PATH=/kibitz/ npm run build`. The offline service worker is only registered in production builds; try it with `npm run build && npm run preview`.
+`npm run build` produces a static site in `dist/` that any free static host can serve. Set `BASE_PATH` when serving from a sub-path, for example `BASE_PATH=/chessYes/ npm run build`. The offline service worker is only registered in production builds; try it with `npm run build && npm run preview`.
 
 ## Deploy to Netlify
 
 All build settings live in [netlify.toml](netlify.toml), so there is nothing to configure:
 
 1. In Netlify, choose **Add new site → Import an existing project → GitHub**.
-2. Pick the `kibitz-chess` repository (private repositories work on the free plan).
+2. Pick the `chessYes` repository (private repositories work on the free plan).
 3. Click **Deploy**. Every push to `main` redeploys automatically.
 
 The site is fully static: no functions, no environment variables, no server costs. Each deploy gets a new service worker, and open copies of the app offer to reload into the new version.
