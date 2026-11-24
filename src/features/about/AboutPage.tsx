@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/Card';
 import { LogoMark } from '@/components/ui/Logo';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
 import { pageTitle } from '@/app/seo';
+import { ClassificationLegend } from '@/features/home/ClassificationLegend';
+import { HomeFaq } from '@/features/home/HomeFaq';
 import { CLASSIFICATION_DOC_URL, REPO_URL, VOICE_REPO_URL } from './links';
 
 interface Credit {
@@ -186,6 +188,10 @@ export default function AboutPage() {
           ))}
         </ul>
       </section>
+
+      <ClassificationLegend />
+
+      <HomeFaq />
 
       <section aria-labelledby="licenses-heading" className="space-y-3">
         <h2 id="licenses-heading" className="text-lg font-semibold">

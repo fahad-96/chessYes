@@ -18,7 +18,7 @@ const ssrDir = new URL('.ssr/', root);
 const baseUrl = process.env.BASE_PATH ?? '/';
 
 const server = await import(new URL('entry-server.js', ssrDir).href);
-const { PAGES, SITE_NAME, SITE_URL, headTagsForPath, pageTitle, renderPage, structuredData } =
+const { PAGES, SITE_NAME, SITE_URL, headTagsForPath, pageTitle, renderPage, structuredDataFor } =
   server;
 const template = readFileSync(new URL('index.html', dist), 'utf8');
 
@@ -35,7 +35,7 @@ for (const page of PAGES) {
       ...tags,
       title: pageTitle(page.path),
       body,
-      jsonLd: page.path === '/' ? structuredData() : undefined,
+      jsonLd: structuredDataFor(page.path),
     }),
   );
   console.log(`[prerender] ${page.path} -> ${fileForPath(page.path)} (${body.length} chars)`);

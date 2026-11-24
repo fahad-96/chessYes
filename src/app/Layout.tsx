@@ -6,19 +6,36 @@ import { Logo } from '@/components/ui/Logo';
 import { AUTHOR_NAME, AUTHOR_URL, CLASSIFICATION_DOC_URL, REPO_URL } from '@/features/about/links';
 import { useSettings, type BoardTheme, type ThemeSetting } from '@/state/settings';
 import { NavDrawer, currentNavItem } from './NavDrawer';
+import { Sidebar } from './Sidebar';
 import { useSeoHead } from './useSeoHead';
 
-/** App shell: sticky header, page outlet and footer. Also applies the theme settings. */
+/**
+ * App shell. The landing page (/) is a single full-screen page with its own top bar and links,
+ * so it gets none of the app's chrome. Every other page has the sidebar on large screens, the
+ * floating header with its menu drawer on smaller ones, and the footer. Also applies the theme
+ * settings.
+ */
 export function Layout() {
   const theme = useSettings((s) => s.theme);
   const boardTheme = useSettings((s) => s.boardTheme);
   useDocumentTheme(theme, boardTheme);
   useFocusOnNavigation();
-  useSeoHead(useLocation().pathname);
+  const { pathname } = useLocation();
+  useSeoHead(pathname);
+
+  if (pathname === '/') {
+    return (
+      <>
+        <Outlet />
+        <ScrollRestoration />
+      </>
+    );
+  }
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col lg:pl-[16.5rem]">
       <div aria-hidden="true" className="kb-ambient" />
+      <Sidebar pathname={pathname} />
       <a
         href="#main"
         onClick={(event) => {
@@ -34,7 +51,7 @@ export function Layout() {
       <main
         id="main"
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl flex-1 px-4 py-4 outline-none sm:py-6"
+        className="mx-auto w-full max-w-6xl flex-1 px-4 py-4 outline-none sm:py-6 lg:px-8 lg:py-8"
       >
         <Outlet />
       </main>
@@ -61,7 +78,7 @@ function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-40 px-2 pt-2 sm:px-4 sm:pt-3">
+    <header className="sticky top-0 z-40 px-2 pt-2 sm:px-4 sm:pt-3 lg:hidden">
       <div className="kb-glass mx-auto flex h-14 w-full max-w-6xl items-center gap-1 rounded-2xl pr-2 pl-1.5 sm:gap-2">
         <button
           type="button"
@@ -74,7 +91,7 @@ function Header() {
         >
           <Menu className="h-[22px] w-[22px]" aria-hidden="true" />
         </button>
-        <Link to="/" aria-label="Chess Yes home" className="rounded-lg px-1 py-1">
+        <Link to="/home" aria-label="Chess Yes home" className="rounded-lg px-1 py-1">
           <Logo />
         </Link>
         <div className="ml-auto flex items-center gap-1">

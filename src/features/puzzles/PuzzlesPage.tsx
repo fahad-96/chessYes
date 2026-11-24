@@ -33,6 +33,8 @@ import {
   type PuzzleStats,
 } from './progress';
 import { PuzzleTrainer, type PuzzleStatus } from './PuzzleTrainer';
+import { SessionHud, SessionOver, SessionStrip } from './SessionHud';
+import { applyOutcome, isOver, loadBest, newSession, saveBest } from './session';
 import { THEME_DESCRIPTIONS, THEME_LABELS } from './themes';
 import { usePuzzleData } from './usePuzzleData';
 
@@ -122,6 +124,10 @@ export default function PuzzlesPage() {
   // first puzzle shows without an empty frame).
   const filterKey = `${currentPlayerKey}|${theme}`;
   const [session, setSession] = useState<Session | null>(null);
+  // The scored run on top of practice: a point per puzzle solved, a life per miss.
+  const [run, setRun] = useState(() => newSession(loadBest()));
+  const [bestBefore, setBestBefore] = useState(run.best);
+  useEffect(() => saveBest(run.best), [run.best]);
   if (entries && (session === null || session.filterKey !== filterKey)) {
     const fresh = { ahead: false, skipped: EMPTY, done: EMPTY };
     const serial = (session?.current?.serial ?? 0) + 1;
@@ -152,6 +158,7 @@ export default function PuzzlesPage() {
     (outcome: PuzzleOutcome) => {
       if (!currentId) return;
       record(currentId, outcome);
+      setRun((current) => applyOutcome(current, outcome));
       setSession((s) => (s ? { ...s, done: new Set([...s.done, currentId]) } : s));
     },
     [record, currentId],
@@ -217,16 +224,30 @@ export default function PuzzlesPage() {
             onSelect={(next) => updateParams({ theme: next === 'all' ? null : next })}
           />
           <div className="mt-3 lg:mt-4">
-            {currentPuzzle && session?.current ? (
-              <PuzzleTrainer
-                key={`${currentPuzzle.id}:${session.current.serial}`}
-                puzzle={currentPuzzle}
-                status={session.current.status}
-                onOutcome={onOutcome}
-                onNext={goNext}
-                onSkip={skip}
-                aside={<StatsBar stats={stats} className="hidden lg:block" />}
+            {isOver(run) ? (
+              <SessionOver
+                session={run}
+                newBest={run.score > bestBefore}
+                onRestart={() => {
+                  setBestBefore(run.best);
+                  setRun(newSession(run.best));
+                  goNext();
+                }}
               />
+            ) : currentPuzzle && session?.current ? (
+              <>
+                <SessionStrip session={run} className="mb-3 lg:hidden" />
+                <PuzzleTrainer
+                  key={`${currentPuzzle.id}:${session.current.serial}`}
+                  puzzle={currentPuzzle}
+                  status={session.current.status}
+                  onOutcome={onOutcome}
+                  onNext={goNext}
+                  onSkip={skip}
+                  panelTop={<SessionHud session={run} className="hidden lg:flex" />}
+                  aside={<StatsBar stats={stats} className="hidden lg:block" />}
+                />
+              </>
             ) : (
               <CaughtUpState
                 nextDue={nextDueAt(filtered, progress)}
@@ -457,7 +478,13 @@ function EmptyCard({ title, children }: { title: string; children: ReactNode }) 
  * version of Chess Yes: they no longer count, which the card explains.
  */
 function NoGamesState({ outdated }: { outdated: number }) {
-  const recent = useSettings((s) => s.recent[0]);
+  const account = useSettings((s) => s.account);
+  const recentSearch = useSettings((s) => s.recent[0]);
+  const recent = account ?? recentSearch;
+  // With a connected account, "Analyse my recent games" runs the analysis flow (/train).
+  const analysePath = account
+    ? '/train'
+    : recent && insightsPath({ platform: recent.platform, username: recent.username });
   return (
     <div className="mx-auto w-full max-w-2xl">
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Puzzles</h1>
@@ -478,16 +505,13 @@ function NoGamesState({ outdated }: { outdated: number }) {
           Chess Yes can’t tell which side you played.)
         </p>
         <div className="mt-2 flex flex-wrap justify-center gap-2">
-          {recent && (
-            <Link
-              to={insightsPath({ platform: recent.platform, username: recent.username })}
-              className={buttonClass('primary')}
-            >
+          {analysePath && (
+            <Link to={analysePath} className={buttonClass('primary')}>
               <ChartLine aria-hidden="true" className="h-4 w-4" />
               Analyse my recent games
             </Link>
           )}
-          <Link to="/" className={buttonClass(recent ? 'secondary' : 'primary')}>
+          <Link to="/home" className={buttonClass(recent ? 'secondary' : 'primary')}>
             <Search aria-hidden="true" className="h-4 w-4" />
             Find my games
           </Link>
@@ -499,6 +523,11 @@ function NoGamesState({ outdated }: { outdated: number }) {
 
 /** Reviewed games exist for the player, but none had a clear puzzle. */
 function NoPuzzlesState({ player, games }: { player: PuzzlePlayer; games: number }) {
+  const account = useSettings((s) => s.account);
+  const ownAccount =
+    !!account &&
+    account.platform === player.platform &&
+    account.username.toLowerCase() === player.username.toLowerCase();
   return (
     <EmptyCard title={`No puzzles for ${player.username} yet`}>
       <p className="max-w-md text-sm leading-relaxed text-muted">
@@ -506,7 +535,7 @@ function NoPuzzlesState({ player, games }: { player: PuzzlePlayer; games: number
         mistake with one clear best answer. That’s good news! Review more games to get puzzles.
       </p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
-        <Link to={insightsPath(player)} className={buttonClass('primary')}>
+        <Link to={ownAccount ? '/train' : insightsPath(player)} className={buttonClass('primary')}>
           <ChartLine aria-hidden="true" className="h-4 w-4" />
           Analyse my recent games
         </Link>

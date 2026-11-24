@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FAQ } from '@/features/home/faq';
-import { PAGES, SITE_URL, headTagsForPath, pageForPath, pageTitle, structuredData } from './seo';
+import { PAGES, SITE_URL, headTagsForPath, pageForPath, pageTitle, structuredDataFor } from './seo';
 
 describe('page metadata', () => {
   it('fits search result limits and is unique per page', () => {
@@ -36,6 +36,7 @@ describe('headTagsForPath', () => {
 
   it('keeps settings, personal pages and unknown paths out of the index', () => {
     expect(headTagsForPath('/settings').robots).toBe('noindex, follow');
+    expect(headTagsForPath('/home').robots).toBe('noindex, follow');
     for (const path of [
       '/review/lichess/abc',
       '/player/chesscom/hikaru',
@@ -49,9 +50,9 @@ describe('headTagsForPath', () => {
   });
 });
 
-describe('structuredData', () => {
-  it('names the site and describes the free app', () => {
-    const [faq, site, app] = structuredData() as Record<string, unknown>[];
+describe('structuredDataFor', () => {
+  it('names the site and describes the free app on the landing page', () => {
+    const [site, app] = structuredDataFor('/') as Record<string, unknown>[];
     expect(site).toMatchObject({ '@type': 'WebSite', name: 'Chess Yes', url: `${SITE_URL}/` });
     expect(site?.alternateName).toContain('ChessYes');
     expect(app).toMatchObject({
@@ -59,11 +60,16 @@ describe('structuredData', () => {
       isAccessibleForFree: true,
       offers: { price: '0' },
     });
+  });
+
+  it('marks up the questions on the About page, where they are shown', () => {
+    const [faq] = structuredDataFor('/about') as Record<string, unknown>[];
     expect(faq).toMatchObject({ '@type': 'FAQPage' });
     expect((faq?.mainEntity as unknown[]).length).toBe(FAQ.length);
+    expect(structuredDataFor('/play')).toEqual([]);
   });
 
   it('serialises to JSON', () => {
-    expect(() => JSON.parse(JSON.stringify(structuredData()))).not.toThrow();
+    expect(() => JSON.parse(JSON.stringify(structuredDataFor('/')))).not.toThrow();
   });
 });

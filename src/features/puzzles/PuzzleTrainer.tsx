@@ -67,6 +67,8 @@ export interface PuzzleTrainerProps {
   onSkip: () => void;
   /** Shown under the puzzle panel (stats on wide screens). */
   aside?: ReactNode;
+  /** Shown above the puzzle panel (the session's scoreboard on wide screens). */
+  panelTop?: ReactNode;
 }
 
 /** The solution line on the board after the attempt. */
@@ -97,6 +99,7 @@ export function PuzzleTrainer({
   onNext,
   onSkip,
   aside,
+  panelTop,
 }: PuzzleTrainerProps) {
   const [state, dispatch] = useReducer(attemptReducer, INITIAL_ATTEMPT);
   /** The move being checked or just rejected, shown on the board. */
@@ -273,8 +276,18 @@ export function PuzzleTrainer({
     <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6">
       <section
         aria-label="Puzzle board"
-        className="md:mx-auto md:w-full md:max-w-[max(20rem,calc(100dvh-26rem))] lg:sticky lg:top-20 lg:max-w-[calc(100dvh-14rem)] lg:min-w-[22rem]"
+        className="md:mx-auto md:w-full md:max-w-[max(20rem,calc(100dvh-26rem))] lg:sticky lg:top-6 lg:max-w-[calc(100dvh-14rem)] lg:min-w-[22rem]"
       >
+        <p
+          className={cn(
+            'mb-2.5 rounded-xl py-2.5 text-center text-base font-semibold shadow-sm ring-1',
+            puzzle.color === 'w'
+              ? 'bg-[var(--eval-white)] text-[#1c1b19] ring-black/10'
+              : 'bg-[var(--eval-black)] text-white ring-white/10',
+          )}
+        >
+          {puzzle.color === 'w' ? 'White' : 'Black'} to move
+        </p>
         <div className="relative">
           <Board
             fen={shownFrame?.fen ?? puzzle.fen}
@@ -296,6 +309,7 @@ export function PuzzleTrainer({
       </section>
 
       <div className="flex min-w-0 flex-col gap-3 lg:gap-4">
+        {panelTop}
         <Card className="flex flex-col gap-4 p-4">
           <PuzzleHeading puzzle={puzzle} status={status} />
           <Feedback puzzle={puzzle} state={state} hintText={hint?.text ?? null} />

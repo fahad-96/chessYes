@@ -4,6 +4,8 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Layout } from './Layout';
 
 const HomePage = lazy(() => import('@/features/home/HomePage'));
+const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'));
+const TrainPage = lazy(() => import('@/features/train/TrainPage'));
 const GamesPage = lazy(() => import('@/features/games/GamesPage'));
 const ReviewPage = lazy(() => import('@/features/review/ReviewPage'));
 const InsightsPage = lazy(() => import('@/features/insights/InsightsPage'));
@@ -34,7 +36,12 @@ export const routes: RouteObject[] = [
   {
     element: <Layout />,
     children: [
+      /** The landing page: the photo, the headline and "Get started". */
       { path: '/', element: page(<HomePage />) },
+      /** The app's home: the connected account's games (or "Connect your account"). */
+      { path: '/home', element: page(<DashboardPage />) },
+      /** "Analyze my recent games": analyses them, then offers puzzles from their mistakes. */
+      { path: '/train', element: page(<TrainPage />) },
       /** Game list: /player/chesscom/hikaru or /player/lichess/DrNykterstein */
       { path: '/player/:platform/:username', element: page(<GamesPage />) },
       /** Review: /review/<GameRecord.id>, e.g. /review/lichess/HqjDTU4A */

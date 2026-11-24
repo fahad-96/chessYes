@@ -197,7 +197,7 @@ function GameScreen({
       <h1 className="sr-only">Play Stockfish</h1>
       <section
         aria-label="Game board"
-        className="flex flex-col gap-2 md:mx-auto md:w-full md:max-w-[max(20rem,calc(100dvh-26rem))] lg:sticky lg:top-20 lg:max-w-[calc(100dvh-14rem)] lg:min-w-[22rem]"
+        className="flex flex-col gap-2 md:mx-auto md:w-full md:max-w-[max(20rem,calc(100dvh-26rem))] lg:sticky lg:top-6 lg:max-w-[calc(100dvh-14rem)] lg:min-w-[22rem]"
       >
         <PlayerStrip player={{ name: nameOf(top) }} color={top} toMove={!over && toMove === top} />
         <Board

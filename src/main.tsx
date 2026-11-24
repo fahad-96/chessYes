@@ -2,6 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
+// Display serif for headlines and the wordmark (bundled, so it works offline).
+import '@fontsource/instrument-serif/latin-400.css';
+import '@fontsource/instrument-serif/latin-400-italic.css';
 import './index.css';
 import { App } from './app/App';
 import { registerServiceWorker } from './app/registerServiceWorker';
