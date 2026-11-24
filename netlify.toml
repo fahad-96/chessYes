@@ -58,6 +58,15 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
+# The site lives at https://chessyes.in. The old Netlify address redirects there for good,
+# so search engines see one copy of each page. Deploy previews (deploy-preview-N--chessyes
+# .netlify.app) are other hosts and are not affected.
+[[redirects]]
+  from = "https://chessyes.netlify.app/*"
+  to = "https://chessyes.in/:splat"
+  status = 301
+  force = true
+
 # Routing. Public pages are prerendered files (index.html, play.html, puzzles.html, ...;
 # scripts/prerender.mjs), and a request is served by its file when one exists. Personal
 # pages load the empty, noindex app shell; anything else is a real 404 with the app's
