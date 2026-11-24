@@ -201,7 +201,7 @@ function GameScreen({
                 onClick={() => void review()}
                 disabled={game.moves.length === 0}
               >
-                <ScanSearch className="h-5 w-5" aria-hidden="true" />
+                <ScanSearch className="h-5 w-5 shrink-0" aria-hidden="true" />
                 Review this game
               </Button>
               {reviewError && (
@@ -214,11 +214,11 @@ function GameScreen({
                   variant="secondary"
                   onClick={() => play.start({ color: play.setup.color, level: game.level })}
                 >
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
                   Rematch
                 </Button>
                 <Button variant="secondary" onClick={play.leave}>
-                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
                   New game
                 </Button>
               </div>
@@ -238,7 +238,7 @@ function GameScreen({
                     play.resign();
                   }}
                 >
-                  <Flag className="h-4 w-4" aria-hidden="true" />
+                  <Flag className="h-4 w-4 shrink-0" aria-hidden="true" />
                   Resign
                 </Button>
                 <Button variant="secondary" autoFocus onClick={() => setResignAt(null)}>
@@ -249,15 +249,15 @@ function GameScreen({
           ) : (
             <div className="grid grid-cols-3 gap-2">
               <Button variant="secondary" onClick={play.takeBack} disabled={!play.canTakeBack}>
-                <Undo2 className="h-4 w-4" aria-hidden="true" />
+                <Undo2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                 Take back
               </Button>
               <Button variant="secondary" onClick={() => setFlipped((value) => !value)}>
-                <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
+                <ArrowDownUp className="h-4 w-4 shrink-0" aria-hidden="true" />
                 Flip
               </Button>
               <Button variant="secondary" onClick={() => setResignAt(plies)}>
-                <Flag className="h-4 w-4" aria-hidden="true" />
+                <Flag className="h-4 w-4 shrink-0" aria-hidden="true" />
                 Resign
               </Button>
             </div>
@@ -313,7 +313,7 @@ function GameStatus({
         <p className="font-bold text-danger">Stockfish could not move.</p>
         <p className="text-sm text-muted">{play.engine.message}</p>
         <Button variant="secondary" size="sm" className="self-start" onClick={play.retryEngine}>
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
           Try again
         </Button>
       </div>
