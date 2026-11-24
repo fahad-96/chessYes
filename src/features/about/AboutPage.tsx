@@ -137,12 +137,12 @@ const HOW_IT_WORKS: { icon: ReactNode; title: string; body: ReactNode }[] = [
     title: 'Private by design',
     body: (
       <>
-        No accounts, no tracking, no ads. Your games, analyses and settings are stored only in your
-        browser, and you can clear them any time in{' '}
+        No accounts, no ads, no tracking cookies. Your games, analyses and settings are stored only
+        in your browser, and you can clear them any time in{' '}
         <Link to="/settings" className="text-accent underline-offset-4 hover:underline">
           Settings
         </Link>
-        .
+        . The site only counts anonymous visits, to see how many people use it.
       </>
     ),
   },

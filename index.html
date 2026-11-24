@@ -63,6 +63,20 @@
         document.documentElement.dataset.board = 'green';
       }
     </script>
+    <script>
+      // Anonymous visit count with Cloudflare Web Analytics: no cookies, nothing stored on the
+      // device, no personal data. Only on the real site (not local builds or deploy previews),
+      // and not for visitors whose browser asks sites not to track them.
+      (function () {
+        const optedOut = navigator.globalPrivacyControl === true || navigator.doNotTrack === '1';
+        if (location.hostname !== 'chessyes.in' || optedOut) return;
+        const beacon = document.createElement('script');
+        beacon.defer = true;
+        beacon.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+        beacon.dataset.cfBeacon = JSON.stringify({ token: '9dd2f36db3134fdfbbfe5ce251eed53f' });
+        document.head.appendChild(beacon);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
