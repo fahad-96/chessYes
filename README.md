@@ -70,7 +70,7 @@ The site is fully static: no functions, no environment variables, no server cost
 | Board       | chessground                                             | Fast, touch-friendly, arrows built in                                 |
 | Engine      | Stockfish 19 lite (WASM)                                | Runs on the user's device; no special server headers                  |
 | Voice       | Pre-rendered voice pack (Web Audio API); Web Speech API | Clips are fetched as needed (~7 kB each); no model runs on the device |
-| Styling     | Tailwind CSS v4                                         | Classic (default), dark and light themes from design tokens           |
+| Styling     | Tailwind CSS v4                                         | Classic (default), dark and light themes from design tokens; glass UI |
 | Storage     | IndexedDB (idb-keyval)                                  | Analyses, reviewed games and puzzle progress, offline                 |
 | Offline     | Hand-written service worker                             | Every caching rule readable in one file                               |
 | Tests       | Vitest                                                  | Chess logic is pure TypeScript and fully unit-tested                  |

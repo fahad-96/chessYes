@@ -1,45 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
-import { FileUp, Info, Puzzle, ScanSearch, Settings, Swords } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Menu } from 'lucide-react';
 import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { GithubIcon } from '@/components/ui/GithubIcon';
 import { Logo } from '@/components/ui/Logo';
 import { AUTHOR_NAME, AUTHOR_URL, CLASSIFICATION_DOC_URL, REPO_URL } from '@/features/about/links';
-import { cn } from '@/lib/cn';
 import { useSettings, type BoardTheme, type ThemeSetting } from '@/state/settings';
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  /** Whether the current path belongs to this section. */
-  matches: (pathname: string) => boolean;
-  /** Left out of the phone header (below 640px) to keep it from overflowing. */
-  hideOnPhones?: boolean;
-}
-
-const startsWith = (prefix: string) => (p: string) => p === prefix || p.startsWith(`${prefix}/`);
-
-const NAV_ITEMS: NavItem[] = [
-  {
-    to: '/',
-    label: 'Review',
-    icon: ScanSearch,
-    // The review flow starts at home, so game lists and reviews count as "Review".
-    matches: (p) => p === '/' || p.startsWith('/player/') || p.startsWith('/review/'),
-  },
-  { to: '/play', label: 'Play', icon: Swords, matches: startsWith('/play') },
-  { to: '/puzzles', label: 'Puzzles', icon: Puzzle, matches: startsWith('/puzzles') },
-  {
-    to: '/import',
-    label: 'Import PGN',
-    icon: FileUp,
-    matches: startsWith('/import'),
-    // The home page links to the import, so phones can do without the icon.
-    hideOnPhones: true,
-  },
-  { to: '/settings', label: 'Settings', icon: Settings, matches: startsWith('/settings') },
-  { to: '/about', label: 'About', icon: Info, matches: startsWith('/about') },
-];
+import { NavDrawer, currentNavItem } from './NavDrawer';
 
 /** App shell: sticky header, page outlet and footer. Also applies the theme settings. */
 export function Layout() {
@@ -50,6 +16,7 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <div aria-hidden="true" className="kb-ambient" />
       <a
         href="#main"
         onClick={(event) => {
@@ -75,51 +42,64 @@ export function Layout() {
   );
 }
 
+/**
+ * Floating glass header: the menu button and the logo on the left, the current section
+ * and the source link on the right. The sections live in the menu drawer (NavDrawer).
+ */
 function Header() {
   const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const current = currentNavItem(pathname);
+
+  // Navigating (a link, back or forward) closes the menu.
+  const [menuPath, setMenuPath] = useState(pathname);
+  if (menuPath !== pathname) {
+    setMenuPath(pathname);
+    setMenuOpen(false);
+  }
+
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-chrome/80 backdrop-blur-md supports-[backdrop-filter]:bg-chrome/70">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4">
-        <Link to="/" aria-label="Chess Yes home" className="-ml-1 rounded-lg px-1 py-1">
+    <header className="sticky top-0 z-40 px-2 pt-2 sm:px-4 sm:pt-3">
+      <div className="kb-glass mx-auto flex h-14 w-full max-w-6xl items-center gap-1 rounded-2xl pr-2 pl-1.5 sm:gap-2">
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Open menu"
+          aria-haspopup="dialog"
+          aria-expanded={menuOpen}
+          aria-controls="nav-drawer"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text transition-colors hover:bg-hover"
+        >
+          <Menu className="h-[22px] w-[22px]" aria-hidden="true" />
+        </button>
+        <Link to="/" aria-label="Chess Yes home" className="rounded-lg px-1 py-1">
           <Logo />
         </Link>
-        <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1">
-          {NAV_ITEMS.map((item) => {
-            const active = item.matches(pathname);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                title={item.label}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  // 40px tap targets on phones; compact once the labels show.
-                  'inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors md:h-9 md:min-w-0 md:px-3',
-                  item.hideOnPhones && 'max-sm:hidden',
-                  active
-                    ? 'bg-surface-2 text-text'
-                    : 'text-muted hover:bg-surface-2 hover:text-text',
-                )}
-              >
-                <item.icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                {/* Icon-only on phones so the header never overflows, even at 320px. */}
-                <span className="sr-only md:not-sr-only">{item.label}</span>
-              </Link>
-            );
-          })}
+        <div className="ml-auto flex items-center gap-1">
+          {current && (
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label={`${current.label}: open menu`}
+              className="hidden h-9 items-center gap-2 rounded-full border border-glass-border bg-hover px-3 text-sm font-medium text-text transition-colors hover:bg-accent/15 sm:inline-flex"
+            >
+              <current.icon className="h-4 w-4 text-brand" aria-hidden="true" />
+              {current.label}
+            </button>
+          )}
           <a
             href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
             title="Source code on GitHub"
-            // Hidden on phones to leave room for full-size nav targets; the footer links it too.
-            className="ml-0.5 hidden h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text sm:inline-flex"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-hover hover:text-text"
           >
             <GithubIcon className="h-[18px] w-[18px]" />
             <span className="sr-only">Source code on GitHub</span>
           </a>
-        </nav>
+        </div>
       </div>
+      <NavDrawer open={menuOpen} onClose={() => setMenuOpen(false)} pathname={pathname} />
     </header>
   );
 }

@@ -74,8 +74,8 @@ const NO_WIN_PERCENTS: readonly number[] = [];
  */
 function revealBoard(smooth: boolean) {
   const board = document.querySelector('section[aria-label="Board"]');
-  // Already in view below the sticky app header.
-  if (!board || board.getBoundingClientRect().top >= 48) return;
+  // Already in view below the sticky app header (64px tall on phones).
+  if (!board || board.getBoundingClientRect().top >= 64) return;
   board.scrollIntoView?.({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
 }
 const NO_ARROWS: readonly BoardArrow[] = [];
@@ -967,7 +967,7 @@ function ReviewView({ state, record, game }: ReviewViewProps) {
             stays visible above the move bar. */}
         <section
           aria-label="Board"
-          className="mt-3 flex scroll-mt-16 flex-col gap-1.5 md:mx-auto md:max-w-[max(20rem,calc(100dvh-30rem))]"
+          className="mt-3 flex scroll-mt-18 flex-col gap-1.5 md:mx-auto md:max-w-[max(20rem,calc(100dvh-30rem))]"
         >
           {renderStrip(topColor)}
           {boardBlock}

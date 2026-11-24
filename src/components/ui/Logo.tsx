@@ -1,11 +1,20 @@
+import { useId } from 'react';
 import { cn } from '@/lib/cn';
 
+/** The board squares darkened in the mark: a 4 × 4 corner of a chessboard. */
+const DARK_SQUARES =
+  'M16 0h16v16H16zM48 0h16v16H48zM0 16h16v16H0zM32 16h16v16H32zM16 32h16v16H16zM48 32h16v16H48zM0 48h16v16H0zM32 48h16v16H32z';
+
 /**
- * The Chess Yes mark: a speech bubble with "!?" (the annotation for an interesting
- * move), because kibitzing means commenting on a game you are watching.
- * Same drawing as public/favicon.svg, but coloured with theme tokens.
+ * The Chess Yes mark: a corner of a chessboard with a check mark on it. "Check" is both the
+ * chess word and a yes. The tile is glass-like (a soft top sheen and a light rim) to match
+ * the glass header. Brand colours are fixed, so the mark looks the same in every theme.
+ * Same drawing as public/favicon.svg; the app icons in public/icons are rendered from it.
  */
 export function LogoMark({ className, size = 28 }: { className?: string; size?: number }) {
+  // Ids must be unique per instance: the mark can appear more than once on a page.
+  const id = useId().replace(/:/g, '');
+  const ref = (name: string) => `${id}-${name}`;
   return (
     <svg
       viewBox="0 0 64 64"
@@ -14,25 +23,84 @@ export function LogoMark({ className, size = 28 }: { className?: string; size?: 
       aria-hidden="true"
       className={cn('shrink-0', className)}
     >
-      <rect width="64" height="64" rx="14" fill="var(--accent)" />
-      <path
-        d="M14 16h36a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H30l-10 8v-8h-6a6 6 0 0 1-6-6V22a6 6 0 0 1 6-6z"
-        fill="var(--accent-fg)"
+      <defs>
+        <linearGradient
+          id={ref('bg')}
+          x1="10"
+          y1="0"
+          x2="54"
+          y2="64"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#8fd14f" />
+          <stop offset="1" stopColor="#357317" />
+        </linearGradient>
+        <linearGradient
+          id={ref('sheen')}
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="64"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#fff" stopOpacity=".26" />
+          <stop offset=".55" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient
+          id={ref('rim')}
+          x1="0"
+          y1="0"
+          x2="64"
+          y2="64"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#fff" stopOpacity=".6" />
+          <stop offset=".5" stopColor="#fff" stopOpacity=".08" />
+          <stop offset="1" stopColor="#fff" stopOpacity=".22" />
+        </linearGradient>
+        <filter id={ref('shadow')} x="-20%" y="-20%" width="140%" height="160%">
+          <feDropShadow dx="0" dy="2.2" stdDeviation="1.8" floodColor="#0d3004" floodOpacity=".5" />
+        </filter>
+        <clipPath id={ref('clip')}>
+          <rect width="64" height="64" rx="16" />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${ref('clip')})`}>
+        <rect width="64" height="64" fill={`url(#${ref('bg')})`} />
+        <path fill="#0b2a05" fillOpacity=".15" d={DARK_SQUARES} />
+        <rect width="64" height="64" fill={`url(#${ref('sheen')})`} />
+      </g>
+      <rect
+        x=".75"
+        y=".75"
+        width="62.5"
+        height="62.5"
+        rx="15.25"
+        fill="none"
+        stroke={`url(#${ref('rim')})`}
+        strokeWidth="1.5"
       />
       <path
-        d="M25 22h4l-.8 12h-2.4zM27 36.5a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4zM36 26.5c0-3 2.4-4.8 5.3-4.8 3 0 5.2 1.8 5.2 4.4 0 2-1.1 3-2.6 4-1.2.8-1.6 1.3-1.6 2.6v.8h-3.4v-1c0-2 .7-3 2.2-4 1.2-.8 1.8-1.3 1.8-2.3 0-1-.8-1.7-1.7-1.7-1.1 0-1.9.8-1.9 2zM40.6 36.5a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z"
-        fill="var(--accent)"
+        d="M17 33.5 27 43.5 47 22.5"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        filter={`url(#${ref('shadow')})`}
       />
     </svg>
   );
 }
 
-/** Mark plus the "Chess Yes" wordmark. */
-export function Logo({ className }: { className?: string }) {
+/** Mark plus the "Chess Yes" wordmark, with "Yes" in the brand green. */
+export function Logo({ className, size = 30 }: { className?: string; size?: number }) {
   return (
-    <span className={cn('inline-flex items-center gap-2', className)}>
-      <LogoMark />
-      <span className="text-lg font-bold tracking-tight text-text">Chess Yes</span>
+    <span className={cn('inline-flex items-center gap-2.5', className)}>
+      <LogoMark size={size} />
+      <span className="text-lg leading-none font-extrabold tracking-tight text-text">
+        Chess <span className="text-brand">Yes</span>
+      </span>
     </span>
   );
 }
