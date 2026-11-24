@@ -41,7 +41,7 @@ export const FAQ: readonly FaqItem[] = [
   {
     question: 'Are my games private?',
     answer:
-      'Yes. Games, analyses and puzzles are stored only in your browser. There are no accounts, no ads and no tracking.',
+      'Yes. Games, analyses and puzzles are stored only in your browser. There are no accounts, no ads and no tracking cookies: the site only counts anonymous visits.',
   },
   {
     question: 'Does it work on my phone, and offline?',
