@@ -174,6 +174,80 @@
   --radius-xl: 0.5rem;
 }
 
+/*
+ * Glass. Surfaces that float over the page (the header, the menu) are frosted glass:
+ * a translucent tint of the theme's surface with a blur behind it, a light rim that is
+ * brightest at the top-left corner, a thin highlight along the top edge and a soft
+ * shadow. Cards are translucent with the same rim and highlight but no blur: what is
+ * behind them is the soft ambient background, which a blur would not change, and a blur
+ * on every card would cost phones a lot. Text contrast is checked against the most
+ * opaque fallback, and every glass surface turns solid with prefers-reduced-transparency
+ * or prefers-contrast: more (see the components layer below).
+ *
+ * Declared on every theme scope so that nested previews (Settings) mix their own surface.
+ */
+:root,
+[data-theme] {
+  --glass-tint: color-mix(in srgb, var(--surface) 64%, transparent);
+  --glass-card: color-mix(in srgb, var(--surface) 80%, transparent);
+  --glass-sheen: rgb(255 255 255 / 0.06);
+  --glass-border: rgb(255 255 255 / 0.07);
+  --glass-rim: rgb(255 255 255 / 0.2);
+  --glass-rim-soft: rgb(255 255 255 / 0.04);
+  --glass-highlight: rgb(255 255 255 / 0.07);
+  --glass-hover: rgb(255 255 255 / 0.08);
+  --glass-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.3);
+  --card-shadow: 0 8px 24px -14px rgb(0 0 0 / 0.6);
+  --scrim: rgb(0 0 0 / 0.45);
+  /* The Chess Yes green: "Yes" in the wordmark. 4.5:1 or more on the page. */
+  --brand: #6cc04a;
+  /* Ambient light behind the glass, from three corners of the page. */
+  --glow-1: color-mix(in srgb, var(--accent) 16%, transparent);
+  --glow-2: rgb(56 139 253 / 0.12);
+  --glow-3: rgb(108 192 74 / 0.1);
+}
+
+[data-theme='classic'] {
+  --brand: #7cba4a;
+  --glow-1: rgb(106 162 60 / 0.24);
+  --glow-2: rgb(242 181 68 / 0.09);
+  --glow-3: rgb(47 198 201 / 0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --glass-sheen: rgb(255 255 255 / 0.5);
+    --glass-border: rgb(15 23 42 / 0.08);
+    --glass-rim: rgb(255 255 255 / 0.9);
+    --glass-rim-soft: rgb(15 23 42 / 0.06);
+    --glass-highlight: rgb(255 255 255 / 0.8);
+    --glass-hover: rgb(15 23 42 / 0.06);
+    --glass-shadow: 0 12px 32px -12px rgb(15 23 42 / 0.22), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+    --card-shadow: 0 8px 24px -16px rgb(15 23 42 / 0.25);
+    --scrim: rgb(15 23 42 / 0.25);
+    --brand: #2f7a17;
+    --glow-1: rgb(108 192 74 / 0.14);
+    --glow-2: rgb(56 139 253 / 0.1);
+    --glow-3: rgb(242 181 68 / 0.1);
+  }
+}
+
+[data-theme='light'] {
+  --glass-sheen: rgb(255 255 255 / 0.5);
+  --glass-border: rgb(15 23 42 / 0.08);
+  --glass-rim: rgb(255 255 255 / 0.9);
+  --glass-rim-soft: rgb(15 23 42 / 0.06);
+  --glass-highlight: rgb(255 255 255 / 0.8);
+  --glass-hover: rgb(15 23 42 / 0.06);
+  --glass-shadow: 0 12px 32px -12px rgb(15 23 42 / 0.22), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+  --card-shadow: 0 8px 24px -16px rgb(15 23 42 / 0.25);
+  --scrim: rgb(15 23 42 / 0.25);
+  --brand: #2f7a17;
+  --glow-1: rgb(108 192 74 / 0.14);
+  --glow-2: rgb(56 139 253 / 0.1);
+  --glow-3: rgb(242 181 68 / 0.1);
+}
+
 /* Board themes (Settings → Board). Default: slate. */
 :root {
   --board-light: #e3e8ee;
@@ -214,6 +288,9 @@
   --color-button: var(--button);
   --color-button-strong: var(--button-strong);
   --color-chrome: var(--chrome);
+  --color-brand: var(--brand);
+  --color-hover: var(--glass-hover);
+  --color-glass-border: var(--glass-border);
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-c-brilliant: var(--c-brilliant);
@@ -279,6 +356,151 @@ main[tabindex='-1']:focus-visible {
     padding-top: calc(var(--edge, 3px) - 1px);
     padding-bottom: 1px;
   }
+
+  /* Frosted glass (see the glass tokens): the header and the menu drawer. */
+  .kb-glass {
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(160deg, var(--glass-sheen), transparent 55%), var(--glass-tint);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    backdrop-filter: blur(20px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-highlight),
+      var(--glass-shadow);
+  }
+  /* The rim: a 1px gradient border, brightest where light would catch the corners. */
+  .kb-glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      150deg,
+      var(--glass-rim),
+      var(--glass-rim-soft) 35%,
+      var(--glass-rim-soft) 70%,
+      var(--glass-rim)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
+  }
+
+  /* Cards: translucent over the ambient background, with the glass edge but no blur. */
+  .kb-card {
+    background: linear-gradient(160deg, var(--glass-sheen), transparent 45%), var(--glass-card);
+    border-color: var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-highlight),
+      var(--card-shadow);
+  }
+
+  /* Soft light from the corners of the page, so the glass has something to show. */
+  .kb-ambient {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(52rem 36rem at 6% -8%, var(--glow-1), transparent 70%),
+      radial-gradient(44rem 34rem at 100% 24%, var(--glow-2), transparent 70%),
+      radial-gradient(48rem 32rem at 36% 108%, var(--glow-3), transparent 70%);
+  }
+
+  /*
+   * The menu: a <dialog> that slides in from the left as a floating glass panel. Leaving
+   * animates too (display and overlay transition discretely); browsers without
+   * @starting-style simply show and hide it.
+   */
+  .kb-drawer {
+    position: fixed;
+    inset: 0.5rem auto 0.5rem 0.5rem;
+    width: min(21rem, calc(100vw - 2rem));
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 1.25rem;
+    color: var(--text);
+    overflow: hidden;
+    translate: 0 0;
+    opacity: 1;
+    transition:
+      translate 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.2s ease,
+      overlay 0.32s allow-discrete,
+      display 0.32s allow-discrete;
+  }
+  .kb-drawer:not([open]) {
+    translate: calc(-100% - 1rem) 0;
+    opacity: 0;
+  }
+  .kb-drawer::backdrop {
+    background-color: transparent;
+    transition:
+      background-color 0.32s ease,
+      overlay 0.32s allow-discrete,
+      display 0.32s allow-discrete;
+  }
+  .kb-drawer[open]::backdrop {
+    background-color: var(--scrim);
+  }
+  @starting-style {
+    .kb-drawer[open] {
+      translate: calc(-100% - 1rem) 0;
+      opacity: 0;
+    }
+    .kb-drawer[open]::backdrop {
+      background-color: transparent;
+    }
+  }
+
+  /* Solid surfaces wherever glass would hurt: no blur support, or the user asked. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .kb-glass {
+      background: var(--surface);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .kb-glass,
+    .kb-card {
+      background: var(--surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    .kb-ambient {
+      display: none;
+    }
+  }
+  @media (prefers-contrast: more) {
+    .kb-glass,
+    .kb-card {
+      background: var(--surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      border-color: var(--line);
+    }
+    .kb-glass::before {
+      background: var(--line);
+    }
+    .kb-ambient {
+      display: none;
+    }
+  }
+}
+
+/* The page behind the open menu does not scroll. */
+html:has(.kb-drawer[open]) {
+  overflow: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {

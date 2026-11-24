@@ -58,6 +58,9 @@ describe('app shell', () => {
 
   it('marks the Review nav item as current on the home page', () => {
     renderApp();
+    // The header names the section; the links themselves are in the menu.
+    expect(screen.getByRole('button', { name: 'Review: open menu' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const current = screen.getByRole('link', { current: 'page' });
     expect(current.textContent).toContain('Review');
   });
