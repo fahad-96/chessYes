@@ -17,7 +17,8 @@
  * Caching rules. Only GET requests inside this app's scope are handled. Cross-origin
  * requests (the Chess.com and Lichess APIs) always go straight to the network: the app
  * keeps its own IndexedDB caches for game data.
- *   - Navigations: network first, falling back to the precached index.html (offline start).
+ *   - Navigations: network first, falling back to the precached app shell (app.html), whose
+ *     router shows any page (offline start).
  *   - assets/*: cache first. Vite puts a content hash in these names, so a cached copy is
  *     never stale.
  *   - engine/* (Stockfish js + wasm, ~1.9 MB): cache first with background revalidation.
@@ -65,6 +66,8 @@ const NAVIGATION_TIMEOUT_MS = 4000;
 
 const toUrl = (path) => new URL(path, SCOPE).href;
 const INDEX_URL = toUrl('./');
+/** The empty app shell (scripts/prerender.mjs): any route can start from it. */
+const APP_URL = toUrl('./app.html');
 const SHELL_URLS = new Set(PRECACHE.shell.map(toUrl));
 const ENGINE_URLS = new Set(PRECACHE.engine.map(toUrl));
 
@@ -190,10 +193,13 @@ async function handleNavigation(event) {
   try {
     return await withTimeout(network, NAVIGATION_TIMEOUT_MS);
   } catch {
-    // Offline or too slow. Hash routing means every screen is index.html plus a #fragment;
-    // other files opened directly (the engine licence, say) are served if this version has them.
+    // Offline or too slow. Every page is the app shell plus a route the router reads from the
+    // URL; other files opened directly (the engine licence, say) are served if this version
+    // has them. Builds without app.html (vite dev) fall back to index.html.
     const fallback =
-      (await matchOwnCaches(event.request)) ?? (await lookUp(INDEX_URL, PRECACHE_CACHE));
+      (await matchOwnCaches(event.request)) ??
+      (await lookUp(APP_URL, PRECACHE_CACHE)) ??
+      (await lookUp(INDEX_URL, PRECACHE_CACHE));
     if (fallback) {
       network.catch(() => undefined);
       return fallback;

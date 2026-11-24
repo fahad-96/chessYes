@@ -57,3 +57,27 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Routing. Public pages are prerendered files (index.html, play.html, puzzles.html, ...;
+# scripts/prerender.mjs), and a request is served by its file when one exists. Personal
+# pages load the empty, noindex app shell; anything else is a real 404 with the app's
+# "page not found" screen.
+[[redirects]]
+  from = "/review/*"
+  to = "/app.html"
+  status = 200
+
+[[redirects]]
+  from = "/player/*"
+  to = "/app.html"
+  status = 200
+
+[[redirects]]
+  from = "/insights/*"
+  to = "/app.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/404.html"
+  status = 404

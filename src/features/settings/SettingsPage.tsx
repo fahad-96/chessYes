@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { Toggle } from '@/components/ui/Toggle';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import { pageTitle } from '@/app/seo';
 import type { AccuracyModel } from '@/core/accuracyModel';
 import { clearAnalysisCache } from '@/engine/cache';
 import { PRESETS, recommendPreset, type PresetId } from '@/engine/presets';
@@ -75,7 +76,7 @@ function autoPreset(): PresetId | null {
 
 /** /settings: analysis depth and accuracy scale, appearance, review display, voice and storage. */
 export default function SettingsPage() {
-  useDocumentTitle('Settings · Chess Yes');
+  useDocumentTitle(pageTitle('/settings'));
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <header>

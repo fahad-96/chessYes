@@ -6,6 +6,7 @@ import { Logo } from '@/components/ui/Logo';
 import { AUTHOR_NAME, AUTHOR_URL, CLASSIFICATION_DOC_URL, REPO_URL } from '@/features/about/links';
 import { useSettings, type BoardTheme, type ThemeSetting } from '@/state/settings';
 import { NavDrawer, currentNavItem } from './NavDrawer';
+import { useSeoHead } from './useSeoHead';
 
 /** App shell: sticky header, page outlet and footer. Also applies the theme settings. */
 export function Layout() {
@@ -13,6 +14,7 @@ export function Layout() {
   const boardTheme = useSettings((s) => s.boardTheme);
   useDocumentTheme(theme, boardTheme);
   useFocusOnNavigation();
+  useSeoHead(useLocation().pathname);
 
   return (
     <div className="flex min-h-dvh flex-col">

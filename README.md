@@ -49,7 +49,7 @@ Then open http://localhost:5173.
 
 `npm install`, `npm run dev` and `npm run build` also install the coach voice pack (about 20 MB of clips, named in `voice-pack.json`) into `public/voice-pack/`. Without network access the step is skipped with a warning and the app speaks with the device's voice instead.
 
-`npm run build` produces a static site in `dist/` that any free static host can serve. Set `BASE_PATH` when serving from a sub-path, for example `BASE_PATH=/chessYes/ npm run build`. The offline service worker is only registered in production builds; try it with `npm run build && npm run preview`.
+`npm run build` produces a static site in `dist/`: the public pages are prerendered as HTML (title, description and content for search engines), with a sitemap and robots.txt. The host must serve `app.html` for `/review/*`, `/player/*` and `/insights/*` and `404.html` for unknown paths; `netlify.toml` does this on Netlify. Set `BASE_PATH` when serving from a sub-path, for example `BASE_PATH=/chessYes/ npm run build`. The offline service worker is only registered in production builds; try it with `npm run build && npm run preview`.
 
 ## Deploy to Netlify
 

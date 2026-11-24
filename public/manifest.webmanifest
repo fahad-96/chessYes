@@ -51,10 +51,16 @@
   ],
   "shortcuts": [
     {
+      "name": "Play Stockfish",
+      "short_name": "Play",
+      "description": "Play a game against Stockfish",
+      "url": "./play"
+    },
+    {
       "name": "Import PGN",
       "short_name": "Import",
       "description": "Review a game from a pasted PGN",
-      "url": "./#/import"
+      "url": "./import"
     }
   ]
 }

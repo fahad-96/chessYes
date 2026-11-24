@@ -9,13 +9,16 @@ import { defineConfig } from 'vitest/config';
 
 // BASE_PATH lets the same build run at a domain root or under a sub-path
 // such as GitHub Pages (https://<user>.github.io/chessYes/).
-export default defineConfig({
+// The server build (vite build --ssr src/entry-server.tsx, used by scripts/prerender.mjs)
+// needs neither public/ (the 20 MB voice pack) nor the service worker.
+export default defineConfig(({ isSsrBuild }) => ({
   base: process.env.BASE_PATH ?? '/',
-  plugins: [react(), tailwindcss(), serviceWorker()],
+  plugins: [react(), tailwindcss(), ...(isSsrBuild ? [] : [serviceWorker()])],
   build: {
     // The opening book (~700 kB of position data, ~100 kB gzipped) is its own lazily
     // loaded chunk; everything else stays well under Vite's default 500 kB warning.
     chunkSizeWarningLimit: 800,
+    copyPublicDir: !isSsrBuild,
   },
   resolve: {
     alias: {
@@ -27,7 +30,7 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     setupFiles: ['src/test/setup.ts'],
   },
-});
+}));
 
 /**
  * Finishes the service worker (public/sw.js) after a production build: replaces its
@@ -74,7 +77,7 @@ function serviceWorker(): Plugin {
       const buildId = process.env.KIBITZ_BUILD_ID || hash.digest('hex').slice(0, 12);
 
       const precache = {
-        shell: ['./', ...servedFiles.filter((file) => shell.includes(file))],
+        shell: ['./', 'app.html', ...servedFiles.filter((file) => shell.includes(file))],
         assets,
         engine: servedFiles.filter((file) => engine.includes(file)),
       };

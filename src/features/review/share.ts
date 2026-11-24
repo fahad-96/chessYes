@@ -5,8 +5,9 @@
 import type { GameRecord } from '@/core/types';
 
 /**
- * The review link for `href` at `ply`: sets `?ply=N` (or removes it at the start). The app
- * uses hash routing, so the query belongs to the part after "#" when there is one.
+ * The review link for `href` at `ply`: sets `?ply=N` (or removes it at the start). Links
+ * from before the app used real paths keep the route after "#", so there the query belongs
+ * to the part after "#".
  */
 export function reviewLink(href: string, ply: number): string {
   const hashIndex = href.indexOf('#');

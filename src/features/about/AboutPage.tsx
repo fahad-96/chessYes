@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { LogoMark } from '@/components/ui/Logo';
 import { useDocumentTitle } from '@/components/ui/useDocumentTitle';
+import { pageTitle } from '@/app/seo';
 import { CLASSIFICATION_DOC_URL, REPO_URL, VOICE_REPO_URL } from './links';
 
 interface Credit {
@@ -147,7 +148,7 @@ const HOW_IT_WORKS: { icon: ReactNode; title: string; body: ReactNode }[] = [
 
 /** /about: what Chess Yes is, how it works, privacy, credits and licenses. */
 export default function AboutPage() {
-  useDocumentTitle('About · Chess Yes');
+  useDocumentTitle(pageTitle('/about'));
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="flex items-start gap-4">
