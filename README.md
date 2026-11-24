@@ -18,6 +18,7 @@ Stockfish runs in your browser, so there is no account, no paywall and no server
 - **"Show why" with tactics**: a blunder shows the reply that punishes it, a brilliant or great move the idea behind it, played out on the board with arrows. Chess Yes spots forks, pins, skewers, discovered attacks and checks, hanging pieces, promotions and back-rank mates: _"You sacrifice the rook on h7: after Kxh7, Nf6+ forks the king and queen and wins the queen."_ Your opponent's moves are explained to you: _"You reply Rxg7+, forking their king and bishop, and win the bishop."_
 - **Voice coach**: hear each move's verdict and the reason as you step through the game, or let it narrate the key moments while the board plays them. It speaks in a natural recorded voice (Bella, pre-rendered with Kokoro-82M) whose tiny clips start instantly and work offline, or with your device's own voice
 - **Explore and retry**: play your own moves from any position with a live engine evaluation, step through the engine's best line, retry a mistake with hints, or work through all of yours with Learn
+- **Play Stockfish**: play a game against the engine at one of eight strengths, from a Beginner who leaves pieces hanging to full-strength Stockfish. Pick White, Black or a random side, take back a move, and when the game is over, review it in one click from your side of the board. A game in progress is saved, so you can leave and come back to it
 - **Share** a link to a move, the FEN, the PGN, or an annotated PGN with labels, evaluations, clocks and the stories as comments
 - **Player insights** across your reviewed games: results, openings, accuracy by phase, move quality, time trouble and your costliest mistakes. Analyse a batch of games in the background
 - **Puzzles from your own mistakes**, with hints, "Why it works" on the board, and spaced repetition that brings back the ones you missed
@@ -85,6 +86,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how data flows through the 
 - [x] Player insights across many games and opening statistics
 - [x] Puzzles generated from your own mistakes
 - [x] Offline support, installable as an app
+- [x] Play against Stockfish at eight strengths, then review the game
 - [ ] Trapped pieces in the tactics stories (needs a search of its own)
 
 ## Contributing

@@ -6,6 +6,7 @@ import {
   History,
   ListChecks,
   ShieldCheck,
+  Swords,
   X,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -164,13 +165,22 @@ function SearchForm() {
           </p>
         )}
       </Card>
-      <Link
-        to="/import"
-        className="mt-3 inline-flex items-center gap-1.5 rounded-md text-sm text-muted underline-offset-4 hover:text-text hover:underline"
-      >
-        <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
-        Or paste a PGN
-      </Link>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+        <Link
+          to="/import"
+          className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted underline-offset-4 hover:text-text hover:underline"
+        >
+          <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
+          Or paste a PGN
+        </Link>
+        <Link
+          to="/play"
+          className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted underline-offset-4 hover:text-text hover:underline"
+        >
+          <Swords className="h-4 w-4" aria-hidden="true" />
+          Or play Stockfish
+        </Link>
+      </div>
     </form>
   );
 }

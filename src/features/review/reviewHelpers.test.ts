@@ -45,6 +45,7 @@ import {
   resolvePerspective,
   resultLabel,
   shallowerPresets,
+  viewerColorFromSearch,
 } from './reviewHelpers';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -359,6 +360,24 @@ describe('resolvePerspective', () => {
     expect(resolvePerspective({ id: 'lichess/abc', ...players }, 'nobody')).toBeNull();
     expect(resolvePerspective({ id: 'lichess/abc', ...players }, '')).toBeNull();
     expect(resolvePerspective({ id: 'lichess/abc', ...players })).toBeNull();
+  });
+});
+
+describe('viewerColorFromSearch', () => {
+  const played = { white: { name: 'Stockfish level 3' }, black: { name: 'You' } };
+
+  it('finds the player named by ?as= in any game', () => {
+    expect(viewerColorFromSearch(played, '?as=You')).toBe('b');
+    expect(viewerColorFromSearch(played, '?ply=4&as=%20you%20')).toBe('b');
+    expect(viewerColorFromSearch(played, '?as=Stockfish+level+3')).toBe('w');
+  });
+
+  it('is null without ?as=, for nobody, or when both players have the name', () => {
+    expect(viewerColorFromSearch(played, '')).toBeNull();
+    expect(viewerColorFromSearch(played, '?as=')).toBeNull();
+    expect(viewerColorFromSearch(played, '?as=Hikaru')).toBeNull();
+    const twins = { white: { name: 'White' }, black: { name: 'white' } };
+    expect(viewerColorFromSearch(twins, '?as=white')).toBeNull();
   });
 });
 

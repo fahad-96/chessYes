@@ -9,6 +9,7 @@ const GamesPage = lazy(() => import('@/features/games/GamesPage'));
 const ReviewPage = lazy(() => import('@/features/review/ReviewPage'));
 const InsightsPage = lazy(() => import('@/features/insights/InsightsPage'));
 const PuzzlesPage = lazy(() => import('@/features/puzzles/PuzzlesPage'));
+const PlayPage = lazy(() => import('@/features/play/PlayPage'));
 const ImportPage = lazy(() => import('@/features/import/ImportPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const AboutPage = lazy(() => import('@/features/about/AboutPage'));
@@ -39,6 +40,8 @@ const router = createHashRouter([
       { path: '/insights/:platform/:username', element: page(<InsightsPage />) },
       /** Puzzles built from your own mistakes. */
       { path: '/puzzles', element: page(<PuzzlesPage />) },
+      /** A game against Stockfish at a chosen strength, then its review. */
+      { path: '/play', element: page(<PlayPage />) },
       { path: '/import', element: page(<ImportPage />) },
       { path: '/settings', element: page(<SettingsPage />) },
       { path: '/about', element: page(<AboutPage />) },
