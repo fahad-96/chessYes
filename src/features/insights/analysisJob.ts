@@ -3,7 +3,13 @@ import type { AccuracyModel } from '@/core/accuracyModel';
 import { loadOpeningBook, type OpeningBook } from '@/core/openings';
 import { parsePgn } from '@/core/pgn';
 import { buildGameReview } from '@/core/review';
-import type { GameRecord, GameReview, ParsedGame, PositionAnalysis } from '@/core/types';
+import type {
+  AnalysisSettings,
+  GameRecord,
+  GameReview,
+  ParsedGame,
+  PositionAnalysis,
+} from '@/core/types';
 import { analyzeGame, analyzePositions } from '@/engine/analyzeGame';
 import { analysisCacheKey, loadCachedAnalyses, saveAnalyses } from '@/engine/cache';
 import { PRESETS, type Preset, type PresetId } from '@/engine/presets';
@@ -38,9 +44,11 @@ import type { Platform } from '@/state/settings';
  * deeper search. The library then holds the labels a review of the game shows, and opening
  * one of these games later needs no engine at all.
  *
- * The engine build is single-threaded, so the job runs several engines side by side, each on
- * its own game (see jobLanes): the shared engine plus extra ones that are stopped when the
- * job ends. Each game still gets exactly the same searches, only sooner.
+ * The engine build is single-threaded, so the job runs several engines side by side (see
+ * jobLanes): the shared engine plus extra ones that are stopped when the job ends. The games
+ * still go one after another, but every engine works on the current game, taking the next
+ * few positions whenever it is free (searchOnLanes). Each position gets the same search as
+ * before, only sooner.
  *
  * Only one job runs at a time. Games already in the library
  * are skipped (unless their accuracies are on another scale than the one asked for: those
@@ -533,9 +541,9 @@ async function runJob(
   }
   if (signal.aborted) return finish('cancelled');
 
-  // Extra engines, so several games are analysed at once. One that fails to start only
-  // means fewer lanes: the shared engine alone can do all the work.
-  const extraCount = Math.min(jobLanes(), queue.length) - 1;
+  // Extra engines, which share the work on each game. One that fails to start only means
+  // fewer lanes: the shared engine alone can do all the work.
+  const extraCount = jobLanes() - 1;
   const extras = (
     await Promise.all(
       Array.from({ length: Math.max(0, extraCount) }, () =>
@@ -561,61 +569,19 @@ async function runJob(
   }
   set({ status: 'running' });
 
-  // 3. Analyse the games, each engine taking the next game in the queue when it is free.
+  // 3. Analyse the games one after another, every engine working on the same game.
   const timing = emptyTiming();
-  const lanes = 1 + extras.length;
-  let next = 0;
-  let finished = 0;
-  const active = new Map<number, JobGameProgress>();
-  const remaining = new Map<number, Omit<RemainingWork, 'later'>>();
-  const positionsFrom = (index: number) =>
-    queue.slice(index).reduce((sum, item) => sum + item.game.moves.length + 1, 0);
+  const positionsAfter = (index: number) =>
+    queue.slice(index + 1).reduce((sum, item) => sum + item.game.moves.length + 1, 0);
+  /** Each extra engine as the job uses it (the shared one is wrapped per game, below). */
+  const extraLanes: Lane[] = extras.map((extra) => ({
+    engine: heldExtraEngine(extra, signal),
+    prepare: () => extra.newGame(),
+  }));
 
-  /** Time left: every game in progress plus the games not started, shared by the engines. */
-  const eta = (): number | null => {
-    let total = estimateRemainingMs(timing, {
-      full: 0,
-      refine: 0,
-      positions: 0,
-      later: positionsFrom(next),
-    });
-    for (const work of remaining.values()) {
-      const left = estimateRemainingMs(timing, { ...work, later: 0 });
-      if (left === null || total === null) return null;
-      total += left;
-    }
-    if (total === null) return null;
-    const busy = Math.max(1, Math.min(lanes, active.size + Math.max(0, queue.length - next)));
-    return Math.round(total / busy);
-  };
-  const publish = (throttle: boolean) => {
-    if (signal.aborted) return;
-    const entries = [...active.entries()].sort(([a], [b]) => a - b);
-    // The progress line names the newest game being analysed together with its own number,
-    // so "game 7 of 10 · vs X" is true; the progress bar counts every game in progress.
-    const newest = entries.at(-1);
-    set(
-      {
-        finished,
-        gameNumber: newest
-          ? newest[0] + 1
-          : Math.max(store.state?.gameNumber ?? 0, Math.min(queue.length, finished + 1)),
-        active: entries.map(([, game]) => game),
-        current: newest?.[1] ?? null,
-        etaMs: eta(),
-      },
-      throttle,
-    );
-  };
-
-  /** `engineFor`: the lane's engine as one game uses it; `prepare`: clears it for that game. */
-  const runLane = async (
-    engineFor: (gameId: string) => Engine,
-    prepare: (gameId: string) => Promise<void>,
-  ) => {
-    while (!signal.aborted && next < queue.length) {
-      const index = next++;
-      const item = queue[index]!;
+  try {
+    for (const [index, item] of queue.entries()) {
+      if (signal.aborted) break;
       const { record, label, perspective } = item;
       try {
         // The game may have been reviewed on the review screen since the job started.
@@ -623,21 +589,40 @@ async function runJob(
         if (isDone(existing)) {
           if (!existing.perspective) await saveToLibrary({ ...existing, perspective });
           skipped += 1;
-          set({ skipped });
+          set({ skipped, finished: index + 1, gameNumber: index + 1, active: [], current: null });
           continue;
         }
+        const lanes: Lane[] = [
+          {
+            engine: heldEngine(engine, record.id, signal),
+            prepare: () => prepareEngineForGame(engine, record.id),
+          },
+          ...extraLanes,
+        ];
         const review = await analyseOne(item, {
-          engine: engineFor(record.id),
-          prepare: () => prepare(record.id),
+          lanes,
           preset,
           accuracyModel,
           book,
           signal,
           timing,
-          onProgress: (current, left, throttle) => {
-            active.set(index, { gameId: record.id, label, ...current });
-            remaining.set(index, left);
-            publish(throttle);
+          onProgress: (progress, remaining, throttle) => {
+            if (signal.aborted) return;
+            const current = { gameId: record.id, label, ...progress };
+            const left = estimateRemainingMs(timing, {
+              ...remaining,
+              later: positionsAfter(index),
+            });
+            set(
+              {
+                finished: index,
+                gameNumber: index + 1,
+                active: [current],
+                current,
+                etaMs: left === null ? null : Math.round(left / lanes.length),
+              },
+              throttle,
+            );
           },
         });
         const entry = libraryEntryToSave(
@@ -648,45 +633,80 @@ async function runJob(
           await getLibraryEntry(record.id),
         );
         if (entry) await saveToLibrary(entry);
-        set({ analysed: (store.state?.analysed ?? 0) + 1 });
+        set({ analysed: (store.state?.analysed ?? 0) + 1, finished: index + 1 });
       } catch (error) {
-        if (isAbort(error, signal)) return;
+        if (isAbort(error, signal)) break;
         console.error('Batch analysis failed for', record.id, error);
         failures.push({ gameId: record.id, label, message: errorMessage(error) });
-        set({ failures: [...failures] });
-      } finally {
-        active.delete(index);
-        remaining.delete(index);
-        finished += 1;
-        publish(false);
+        set({ failures: [...failures], finished: index + 1 });
       }
     }
-  };
-
-  try {
-    await Promise.all([
-      runLane(
-        (gameId) => heldEngine(engine, gameId, signal),
-        (gameId) => prepareEngineForGame(engine, gameId),
-      ),
-      ...extras.map((extra) => {
-        const held = heldExtraEngine(extra, signal);
-        return runLane(
-          () => held,
-          () => extra.newGame(),
-        );
-      }),
-    ]);
   } finally {
     stopExtras();
   }
   finish(signal.aborted ? 'cancelled' : 'done');
 }
 
-interface AnalyseOneOptions {
+/** One engine as a game uses it, and how to clear its hash table for that game. */
+interface Lane {
   engine: Engine;
-  /** Clears the engine's hash table for this game. */
   prepare: () => Promise<void>;
+}
+
+/** Positions one engine takes at a time in the full pass (neighbours share the hash table). */
+const FULL_BLOCK = 4;
+/** Verification positions one engine takes at a time: the two positions around one move. */
+const REFINE_BLOCK = 2;
+
+/**
+ * Searches `indices` of a game on every lane at once: each lane takes the next block of
+ * `blockSize` positions whenever it is free, so all engines stay busy until the end.
+ * `onPosition` gets each result with the time its search took. Waits for every lane before
+ * settling and rejects with the first error (an AbortError once the signal aborts).
+ */
+async function searchOnLanes(
+  game: ParsedGame,
+  lanes: readonly Lane[],
+  options: {
+    settings: AnalysisSettings;
+    indices: readonly number[];
+    blockSize: number;
+    signal: AbortSignal;
+    onPosition: (index: number, analysis: PositionAnalysis, ms: number) => void;
+  },
+): Promise<void> {
+  const { settings, blockSize, signal, onPosition } = options;
+  const sorted = [...new Set(options.indices)].sort((a, b) => a - b);
+  const blocks: number[][] = [];
+  for (let i = 0; i < sorted.length; i += blockSize) blocks.push(sorted.slice(i, i + blockSize));
+  let next = 0;
+  const outcomes = await Promise.allSettled(
+    lanes.map(async (lane) => {
+      while (next < blocks.length) {
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const block = blocks[next++]!;
+        let mark = Date.now();
+        await analyzePositions(game, {
+          engine: lane.engine,
+          settings,
+          indices: block,
+          signal,
+          onPosition: (index, analysis) => {
+            const now = Date.now();
+            onPosition(index, analysis, now - mark);
+            mark = now;
+          },
+        });
+      }
+    }),
+  );
+  const failed = outcomes.find((outcome) => outcome.status === 'rejected');
+  if (failed) throw failed.reason;
+}
+
+interface AnalyseOneOptions {
+  /** The engines that share the game: the first is the shared engine. */
+  lanes: readonly Lane[];
   preset: Preset;
   accuracyModel: AccuracyModel;
   book: OpeningBook | null;
@@ -702,10 +722,11 @@ interface AnalyseOneOptions {
 
 /**
  * One game: the preset's full pass, then the verification pass, both resumed from and saved
- * to the analysis cache under the key the review screen uses. Resolves with the review.
+ * to the analysis cache under the key the review screen uses. Every lane works on the game
+ * at once (searchOnLanes). Resolves with the review.
  */
 async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise<GameReview> {
-  const { engine, prepare, preset, accuracyModel, book, signal, timing, onProgress } = options;
+  const { lanes, preset, accuracyModel, book, signal, timing, onProgress } = options;
   const { record, game } = item;
   const positions = game.moves.length + 1;
   const moves = game.moves.length;
@@ -732,24 +753,22 @@ async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise
     { full: positions - fullDone(), refine: null, positions },
     false,
   );
-  await prepare();
-  let mark = Date.now();
+  const missing = working.flatMap((analysis, index) => (analysis ? [] : [index]));
+  if (missing.length > 0) await Promise.all(lanes.map((lane) => lane.prepare()));
   let full: PositionAnalysis[];
   try {
-    full = await analyzeGame(game, {
-      engine,
+    await searchOnLanes(game, lanes, {
       settings: preset,
-      existing: working.slice(),
+      indices: missing,
+      blockSize: FULL_BLOCK,
       signal,
-      onPosition: (index, analysis) => {
-        const now = Date.now();
+      onPosition: (index, analysis, ms) => {
         if (!working[index]) {
           working[index] = analysis;
-          timing.fullMs += now - mark;
+          timing.fullMs += ms;
           timing.fullSearches += 1;
           if (++unsaved >= SAVE_EVERY_POSITIONS) persist();
         }
-        mark = now;
         const done = fullDone();
         onProgress(
           { phase: 'analysing', done, total: positions, moves },
@@ -757,6 +776,14 @@ async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise
           true,
         );
       },
+    });
+    // Fills in the positions where the game is over (nothing to search) and checks that
+    // every position is there; anything still missing is searched on the shared engine.
+    full = await analyzeGame(game, {
+      engine: lanes[0]!.engine,
+      settings: preset,
+      existing: working.slice(),
+      signal,
     });
   } finally {
     persist();
@@ -798,19 +825,16 @@ async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise
       );
     };
     report(false);
-    mark = Date.now();
     try {
       if (indices.length > 0) {
-        await analyzePositions(game, {
-          engine,
+        await searchOnLanes(game, lanes, {
           settings,
           indices,
+          blockSize: REFINE_BLOCK,
           signal,
-          onPosition: (index, analysis) => {
-            const now = Date.now();
-            timing.refineMs += now - mark;
+          onPosition: (index, analysis, ms) => {
+            timing.refineMs += ms;
             timing.refineSearches += 1;
-            mark = now;
             pending.delete(index);
             staged.set(index, analysis);
             commitIfConsistent();
