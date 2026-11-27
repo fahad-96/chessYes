@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccuracyModel } from '@/core/accuracyModel';
 import type { GameRecord, PositionAnalysis } from '@/core/types';
 import type { AnalyzeRequest, Engine } from '@/engine/stockfish';
@@ -26,7 +26,9 @@ import {
   getInsightsJob,
   holdInsightsJob,
   jobFraction,
+  jobLanes,
   resetInsightsJobForTests,
+  setJobLanesForTests,
   startInsightsJob,
   subscribeInsightsJob,
   type JobPhase,
@@ -361,6 +363,96 @@ describe('insights analysis job', () => {
     // The job still records whose game it is.
     expect((await getLibraryEntry('lichess/game0002'))?.perspective?.color).toBe('w');
   });
+
+  it('analyses games side by side on extra engines and stops them afterwards', async () => {
+    setJobLanesForTests(3);
+    const engines: FakeEngine[] = [];
+    let terminated = 0;
+    setEngineFactoryForTests(() => {
+      const engine = { ...fakeEngine(), terminate: () => void (terminated += 1) };
+      engines.push(engine);
+      return engine;
+    });
+    // The progress line's number and opponent always belong to the same game.
+    const mismatches: string[] = [];
+    const unsubscribe = subscribeInsightsJob(() => {
+      const state = getInsightsJob();
+      if (state?.current && state.current.gameId !== `lichess/game000${state.gameNumber - 1}`) {
+        mismatches.push(`${state.gameNumber}: ${state.current.gameId}`);
+      }
+    });
+    start([record(0), record(1), record(2)]);
+    const job = await waitForJob(finished);
+    unsubscribe();
+    expect(mismatches).toEqual([]);
+    expect(job).toMatchObject({ status: 'done', queued: 3, analysed: 3, finished: 3 });
+    expect(job.active).toEqual([]);
+    // The shared engine and two extra ones each reviewed one game.
+    expect(engines).toHaveLength(3);
+    expect(engines.map((engine) => fullSearches(engine).length)).toEqual([7, 7, 7]);
+    // The extra engines are stopped; the shared one stays for the review screen.
+    expect(terminated).toBe(2);
+    expect(await getPlayerEntries('lichess', 'DrNykterstein')).toHaveLength(3);
+  });
+
+  it('carries on with fewer engines when an extra one cannot start', async () => {
+    setJobLanesForTests(3);
+    const shared = fakeEngine();
+    let created = 0;
+    setEngineFactoryForTests(() => {
+      created += 1;
+      return created === 1
+        ? shared
+        : { ...fakeEngine(), init: () => Promise.reject(new Error('no')) };
+    });
+    start([record(0), record(1)]);
+    const job = await waitForJob(finished);
+    expect(job).toMatchObject({ status: 'done', analysed: 2 });
+    expect(fullSearches(shared)).toHaveLength(14);
+  });
+
+  it('stops every engine’s work when cancelled', async () => {
+    setJobLanesForTests(2);
+    // Every search runs until it is aborted, as a long engine search would.
+    const gate = (request: AnalyzeRequest) =>
+      new Promise<void>((resolve) => {
+        request.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+    setEngineFactoryForTests(() => fakeEngine({ gate }));
+    start([record(0), record(1), record(2)]);
+    await waitForJob((job) => job.status === 'running');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    cancelInsightsJob();
+    const job = await waitForJob(finished);
+    expect(job.status).toBe('cancelled');
+    expect(job.analysed).toBe(0);
+  });
+});
+
+describe('engines side by side', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const device = (patch: Record<string, unknown>) => {
+    setJobLanesForTests(null);
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Windows NT 10.0)', ...patch });
+    return jobLanes();
+  };
+
+  it('leaves two cores for the page and runs at most four engines', () => {
+    expect(device({ hardwareConcurrency: 2 })).toBe(1);
+    expect(device({ hardwareConcurrency: 4 })).toBe(2);
+    expect(device({ hardwareConcurrency: 8 })).toBe(4);
+    expect(device({ hardwareConcurrency: 16 })).toBe(4);
+  });
+
+  it('runs at most two on phones and low-memory devices', () => {
+    expect(
+      device({ hardwareConcurrency: 8, userAgent: 'Mozilla/5.0 (Linux; Android 14) Mobile' }),
+    ).toBe(2);
+    expect(device({ hardwareConcurrency: 8, deviceMemory: 4 })).toBe(2);
+    expect(device({ hardwareConcurrency: 8, deviceMemory: 8 })).toBe(4);
+  });
 });
 
 describe('job progress', () => {
@@ -373,6 +465,8 @@ describe('job progress', () => {
     selected: 4,
     queued: 4,
     gameNumber: 1,
+    finished: 0,
+    active: [],
     current: null,
     analysed: 0,
     skipped: 0,
@@ -392,11 +486,17 @@ describe('job progress', () => {
   });
 
   it('counts the full pass as the first half of a game and verification as the second', () => {
-    expect(jobFraction(job({ current: current('analysing', 0, 41) }))).toBe(0);
-    expect(jobFraction(job({ current: current('analysing', 41, 41) }))).toBeCloseTo(0.125);
-    expect(jobFraction(job({ current: current('verifying', 5, 10) }))).toBeCloseTo(0.1875);
-    expect(jobFraction(job({ gameNumber: 4, current: current('verifying', 0, 0) }))).toBe(1);
+    expect(jobFraction(job({ active: [current('analysing', 0, 41)] }))).toBe(0);
+    expect(jobFraction(job({ active: [current('analysing', 41, 41)] }))).toBeCloseTo(0.125);
+    expect(jobFraction(job({ active: [current('verifying', 5, 10)] }))).toBeCloseTo(0.1875);
+    expect(jobFraction(job({ finished: 3, active: [current('verifying', 0, 0)] }))).toBe(1);
     expect(jobFraction(job({ queued: 0, status: 'done' }))).toBe(1);
+  });
+
+  it('adds up every game in progress when several engines run', () => {
+    const active = [current('verifying', 5, 10), current('analysing', 41, 41)];
+    // One game finished, plus three quarters and a half of the two in progress.
+    expect(jobFraction(job({ finished: 1, active }))).toBeCloseTo((1 + 0.75 + 0.5) / 4);
   });
 
   it('estimates the time left from the searches timed so far', () => {

@@ -17,7 +17,7 @@ import {
 import { ENGINE_NAME, type Engine } from '@/engine/stockfish';
 import { cacheKey } from '@/features/games/playerGames';
 import { playerColor } from '@/features/games/gameList';
-import { getSharedEngine, prepareEngineForGame } from '@/features/review/engine';
+import { getSharedEngine, prepareEngineForGame, startExtraEngine } from '@/features/review/engine';
 import { libraryEntryToSave } from '@/features/review/reviewHelpers';
 import {
   getLibraryEntry,
@@ -38,7 +38,11 @@ import type { Platform } from '@/state/settings';
  * deeper search. The library then holds the labels a review of the game shows, and opening
  * one of these games later needs no engine at all.
  *
- * Only one job runs at a time: there is one engine per tab. Games already in the library
+ * The engine build is single-threaded, so the job runs several engines side by side, each on
+ * its own game (see jobLanes): the shared engine plus extra ones that are stopped when the
+ * job ends. Each game still gets exactly the same searches, only sooner.
+ *
+ * Only one job runs at a time. Games already in the library
  * are skipped (unless their accuracies are on another scale than the one asked for: those
  * are reviewed again), and engine results are cached per position (engine/cache.ts), so a
  * cancelled job resumes almost where it stopped when it is started again.
@@ -86,8 +90,13 @@ export interface InsightsJob {
   selected: number;
   /** Games that needed the engine (selected minus already reviewed minus unreadable). */
   queued: number;
-  /** 1-based position in the queue of the game being analysed (0 before the first). */
+  /** 1-based queue number of `current` (0 before the first game). */
   gameNumber: number;
+  /** Games of the queue that are finished (analysed, skipped or failed). */
+  finished: number;
+  /** The games being analysed right now, oldest first (several engines run side by side). */
+  active: JobGameProgress[];
+  /** The newest game being analysed (the last of `active`), for the progress line. */
   current: JobGameProgress | null;
   /** Saved to the library by this job. */
   analysed: number;
@@ -186,19 +195,52 @@ export function isJobActive(job: InsightsJob | null): boolean {
   return job?.status === 'checking' || job?.status === 'running';
 }
 
-/**
- * Share of the job that is finished, 0-1: whole games done plus the current game, whose
- * full pass counts for the first half and its verification for the second.
- */
+/** Share of one game that is finished: its full pass is the first half, verification the second. */
+function gameFraction(game: JobGameProgress): number {
+  const share = game.total > 0 ? Math.min(1, game.done / game.total) : 1;
+  return game.phase === 'analysing' ? share / 2 : 0.5 + share / 2;
+}
+
+/** Share of the job that is finished, 0-1: whole games done plus the games in progress. */
 export function jobFraction(job: InsightsJob): number {
   if (job.queued === 0) return job.status === 'done' ? 1 : 0;
-  const current = job.current;
-  let inGame = 0;
-  if (current) {
-    const share = current.total > 0 ? Math.min(1, current.done / current.total) : 1;
-    inGame = current.phase === 'analysing' ? share / 2 : 0.5 + share / 2;
+  const inProgress = job.active.reduce((sum, game) => sum + gameFraction(game), 0);
+  return Math.min(1, (job.finished + inProgress) / job.queued);
+}
+
+// ---------------------------------------------------------------------------
+// Engines side by side
+// ---------------------------------------------------------------------------
+
+/** Most engines one job runs at once. */
+const MAX_LANES = 4;
+let lanesForTests: number | null = null;
+
+/**
+ * How many engines the job runs side by side. Each is single-threaded and takes one core, so
+ * two cores are left for the page itself; phones and low-memory devices run at most two (each
+ * engine has its own memory and they heat a phone quickly).
+ */
+export function jobLanes(): number {
+  if (lanesForTests !== null) return lanesForTests;
+  if (typeof navigator === 'undefined' || !navigator) return 1;
+  const nav = navigator as Navigator & {
+    userAgentData?: { mobile?: boolean };
+    deviceMemory?: number;
+  };
+  const cores = nav.hardwareConcurrency || 2;
+  let lanes = Math.max(1, Math.min(MAX_LANES, cores - 2));
+  const mobile =
+    nav.userAgentData?.mobile === true || /Mobi|Android|iPhone|iPad/.test(nav.userAgent ?? '');
+  if (mobile || (nav.deviceMemory !== undefined && nav.deviceMemory <= 4)) {
+    lanes = Math.min(lanes, 2);
   }
-  return Math.min(1, (Math.max(0, job.gameNumber - 1) + inGame) / job.queued);
+  return lanes;
+}
+
+/** Tests only: fixes the number of engines a job runs (null: from the device again). */
+export function setJobLanesForTests(lanes: number | null): void {
+  lanesForTests = lanes;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +295,23 @@ function heldEngine(engine: Engine, gameId: string, signal: AbortSignal): Engine
     terminate: () => undefined,
     analyze: async (request) => {
       if (await waitWhileHeld(signal)) await prepareEngineForGame(engine, gameId);
+      return engine.analyze(request);
+    },
+  };
+}
+
+/**
+ * An extra engine as the job uses it: nobody else touches it, but its searches still wait
+ * while a review holds the engine, so that review gets the processor to itself.
+ */
+function heldExtraEngine(engine: Engine, signal: AbortSignal): Engine {
+  return {
+    name: engine.name,
+    init: () => engine.init(),
+    newGame: () => engine.newGame(),
+    terminate: () => undefined,
+    analyze: async (request) => {
+      await waitWhileHeld(signal);
       return engine.analyze(request);
     },
   };
@@ -348,6 +407,8 @@ export function startInsightsJob(options: StartJobOptions): boolean {
     selected: records.length,
     queued: 0,
     gameNumber: 0,
+    finished: 0,
+    active: [],
     current: null,
     analysed: 0,
     skipped: 0,
@@ -412,6 +473,7 @@ async function runJob(
     set({
       status,
       current: null,
+      active: [],
       etaMs: null,
       stopping: false,
       paused: false,
@@ -470,65 +532,161 @@ async function runJob(
     console.warn('Opening book unavailable; reviewing without book moves.', error);
   }
   if (signal.aborted) return finish('cancelled');
+
+  // Extra engines, so several games are analysed at once. One that fails to start only
+  // means fewer lanes: the shared engine alone can do all the work.
+  const extraCount = Math.min(jobLanes(), queue.length) - 1;
+  const extras = (
+    await Promise.all(
+      Array.from({ length: Math.max(0, extraCount) }, () =>
+        startExtraEngine().catch((error: unknown) => {
+          console.warn('An extra engine could not start; analysing with fewer.', error);
+          return null;
+        }),
+      ),
+    )
+  ).filter((extra): extra is Engine => extra !== null);
+  const stopExtras = () => {
+    for (const extra of extras) {
+      try {
+        extra.terminate();
+      } catch {
+        // Already gone.
+      }
+    }
+  };
+  if (signal.aborted) {
+    stopExtras();
+    return finish('cancelled');
+  }
   set({ status: 'running' });
 
-  // 3. Analyse the games one after another.
+  // 3. Analyse the games, each engine taking the next game in the queue when it is free.
   const timing = emptyTiming();
-  const positionsAfter = (index: number) =>
-    queue.slice(index + 1).reduce((sum, item) => sum + item.game.moves.length + 1, 0);
+  const lanes = 1 + extras.length;
+  let next = 0;
+  let finished = 0;
+  const active = new Map<number, JobGameProgress>();
+  const remaining = new Map<number, Omit<RemainingWork, 'later'>>();
+  const positionsFrom = (index: number) =>
+    queue.slice(index).reduce((sum, item) => sum + item.game.moves.length + 1, 0);
 
-  for (const [index, item] of queue.entries()) {
-    if (signal.aborted) return finish('cancelled');
-    const { record, label, perspective } = item;
-    try {
-      // The game may have been reviewed on the review screen since the job started.
-      const existing = await getLibraryEntry(record.id);
-      if (isDone(existing)) {
-        if (!existing.perspective) await saveToLibrary({ ...existing, perspective });
-        skipped += 1;
-        set({ skipped, gameNumber: index + 1, current: null });
-        continue;
-      }
-      const review = await analyseOne(item, {
-        engine: heldEngine(engine, record.id, signal),
-        preset,
-        accuracyModel,
-        book,
-        signal,
-        timing,
-        onProgress: (current, remaining, throttle) => {
-          if (signal.aborted) return;
-          set(
-            {
-              gameNumber: index + 1,
-              current: { gameId: record.id, label, ...current },
-              etaMs: estimateRemainingMs(timing, { ...remaining, later: positionsAfter(index) }),
-            },
-            throttle,
-          );
-        },
-      });
-      const entry = libraryEntryToSave(
-        record,
-        item.game,
-        review,
-        perspective,
-        await getLibraryEntry(record.id),
-      );
-      if (entry) await saveToLibrary(entry);
-      set({ analysed: (store.state?.analysed ?? 0) + 1 });
-    } catch (error) {
-      if (isAbort(error, signal)) return finish('cancelled');
-      console.error('Batch analysis failed for', record.id, error);
-      failures.push({ gameId: record.id, label, message: errorMessage(error) });
-      set({ failures: [...failures] });
+  /** Time left: every game in progress plus the games not started, shared by the engines. */
+  const eta = (): number | null => {
+    let total = estimateRemainingMs(timing, {
+      full: 0,
+      refine: 0,
+      positions: 0,
+      later: positionsFrom(next),
+    });
+    for (const work of remaining.values()) {
+      const left = estimateRemainingMs(timing, { ...work, later: 0 });
+      if (left === null || total === null) return null;
+      total += left;
     }
+    if (total === null) return null;
+    const busy = Math.max(1, Math.min(lanes, active.size + Math.max(0, queue.length - next)));
+    return Math.round(total / busy);
+  };
+  const publish = (throttle: boolean) => {
+    if (signal.aborted) return;
+    const entries = [...active.entries()].sort(([a], [b]) => a - b);
+    // The progress line names the newest game being analysed together with its own number,
+    // so "game 7 of 10 · vs X" is true; the progress bar counts every game in progress.
+    const newest = entries.at(-1);
+    set(
+      {
+        finished,
+        gameNumber: newest
+          ? newest[0] + 1
+          : Math.max(store.state?.gameNumber ?? 0, Math.min(queue.length, finished + 1)),
+        active: entries.map(([, game]) => game),
+        current: newest?.[1] ?? null,
+        etaMs: eta(),
+      },
+      throttle,
+    );
+  };
+
+  /** `engineFor`: the lane's engine as one game uses it; `prepare`: clears it for that game. */
+  const runLane = async (
+    engineFor: (gameId: string) => Engine,
+    prepare: (gameId: string) => Promise<void>,
+  ) => {
+    while (!signal.aborted && next < queue.length) {
+      const index = next++;
+      const item = queue[index]!;
+      const { record, label, perspective } = item;
+      try {
+        // The game may have been reviewed on the review screen since the job started.
+        const existing = await getLibraryEntry(record.id);
+        if (isDone(existing)) {
+          if (!existing.perspective) await saveToLibrary({ ...existing, perspective });
+          skipped += 1;
+          set({ skipped });
+          continue;
+        }
+        const review = await analyseOne(item, {
+          engine: engineFor(record.id),
+          prepare: () => prepare(record.id),
+          preset,
+          accuracyModel,
+          book,
+          signal,
+          timing,
+          onProgress: (current, left, throttle) => {
+            active.set(index, { gameId: record.id, label, ...current });
+            remaining.set(index, left);
+            publish(throttle);
+          },
+        });
+        const entry = libraryEntryToSave(
+          record,
+          item.game,
+          review,
+          perspective,
+          await getLibraryEntry(record.id),
+        );
+        if (entry) await saveToLibrary(entry);
+        set({ analysed: (store.state?.analysed ?? 0) + 1 });
+      } catch (error) {
+        if (isAbort(error, signal)) return;
+        console.error('Batch analysis failed for', record.id, error);
+        failures.push({ gameId: record.id, label, message: errorMessage(error) });
+        set({ failures: [...failures] });
+      } finally {
+        active.delete(index);
+        remaining.delete(index);
+        finished += 1;
+        publish(false);
+      }
+    }
+  };
+
+  try {
+    await Promise.all([
+      runLane(
+        (gameId) => heldEngine(engine, gameId, signal),
+        (gameId) => prepareEngineForGame(engine, gameId),
+      ),
+      ...extras.map((extra) => {
+        const held = heldExtraEngine(extra, signal);
+        return runLane(
+          () => held,
+          () => extra.newGame(),
+        );
+      }),
+    ]);
+  } finally {
+    stopExtras();
   }
-  finish('done');
+  finish(signal.aborted ? 'cancelled' : 'done');
 }
 
 interface AnalyseOneOptions {
   engine: Engine;
+  /** Clears the engine's hash table for this game. */
+  prepare: () => Promise<void>;
   preset: Preset;
   accuracyModel: AccuracyModel;
   book: OpeningBook | null;
@@ -547,7 +705,7 @@ interface AnalyseOneOptions {
  * to the analysis cache under the key the review screen uses. Resolves with the review.
  */
 async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise<GameReview> {
-  const { engine, preset, accuracyModel, book, signal, timing, onProgress } = options;
+  const { engine, prepare, preset, accuracyModel, book, signal, timing, onProgress } = options;
   const { record, game } = item;
   const positions = game.moves.length + 1;
   const moves = game.moves.length;
@@ -574,7 +732,7 @@ async function analyseOne(item: QueuedGame, options: AnalyseOneOptions): Promise
     { full: positions - fullDone(), refine: null, positions },
     false,
   );
-  await prepareEngineForGame(engine, record.id);
+  await prepare();
   let mark = Date.now();
   let full: PositionAnalysis[];
   try {
@@ -685,4 +843,5 @@ export function resetInsightsJobForTests(): void {
   store.notifyTimer = undefined;
   store.holds = 0;
   store.holdWaiters = [];
+  lanesForTests = 1;
 }
