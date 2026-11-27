@@ -62,7 +62,7 @@ function serviceWorker(): Plugin {
       const assets = files.filter((file) => file.startsWith(`${assetsDir}/`));
       // The coach voice (public/voice-pack, ~20 MB) is never precached: the worker caches
       // each clip the first time it is played.
-      const shell = ['manifest.webmanifest', 'favicon.svg', ...publicFiles(publicDir, 'icons')];
+      const shell = ['manifest.webmanifest', 'favicon.ico', ...publicFiles(publicDir, 'icons')];
       const engine = engineFiles(publicDir);
       const servedFiles = [...shell, ...engine].filter((file) => existsSync(join(outDir, file)));
 
