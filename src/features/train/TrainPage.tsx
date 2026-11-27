@@ -23,8 +23,11 @@ import { cn } from '@/lib/cn';
 import { useSettings, type RecentSearch } from '@/state/settings';
 import { progressLines, summarizeRun, type TrainSummary } from './trainSummary';
 
-/** The recent games one run analyses (games already reviewed are skipped quickly). */
-export const TRAIN_GAMES = 10;
+/**
+ * The recent games one run analyses (games already reviewed are skipped quickly). Kept small
+ * so the run finishes in well under a minute on most devices.
+ */
+export const TRAIN_GAMES = 3;
 
 /**
  * /train, "Analyze my recent games": runs the connected player's latest games through
