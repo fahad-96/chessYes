@@ -21,6 +21,14 @@ export function getSharedEngine(): Promise<Engine> {
   return enginePromise;
 }
 
+/**
+ * A separate engine, created and initialised now, for work that runs beside the shared one
+ * (the batch job analyses several games at once). The caller terminates it when done.
+ */
+export function startExtraEngine(): Promise<Engine> {
+  return startEngine();
+}
+
 async function startEngine(): Promise<Engine> {
   if (typeof WebAssembly === 'undefined') throw new Error('WebAssembly is not supported.');
   const engine = createEngine();
