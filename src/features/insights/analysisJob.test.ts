@@ -364,7 +364,7 @@ describe('insights analysis job', () => {
     expect((await getLibraryEntry('lichess/game0002'))?.perspective?.color).toBe('w');
   });
 
-  it('analyses games side by side on extra engines and stops them afterwards', async () => {
+  it('shares each game between the engines and stops the extra ones afterwards', async () => {
     setJobLanesForTests(3);
     const engines: FakeEngine[] = [];
     let terminated = 0;
@@ -387,12 +387,46 @@ describe('insights analysis job', () => {
     expect(mismatches).toEqual([]);
     expect(job).toMatchObject({ status: 'done', queued: 3, analysed: 3, finished: 3 });
     expect(job.active).toEqual([]);
-    // The shared engine and two extra ones each reviewed one game.
+    // The shared engine and two extra ones split the positions: each searched once.
     expect(engines).toHaveLength(3);
-    expect(engines.map((engine) => fullSearches(engine).length)).toEqual([7, 7, 7]);
+    const counts = engines.map((engine) => fullSearches(engine).length);
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(21);
+    expect(counts.filter((count) => count > 0).length).toBeGreaterThan(1);
     // The extra engines are stopped; the shared one stays for the review screen.
     expect(terminated).toBe(2);
     expect(await getPlayerEntries('lichess', 'DrNykterstein')).toHaveLength(3);
+  });
+
+  it('gives the same review on several engines as on one', async () => {
+    // A longer game, so every engine gets positions; the deeper re-check also runs.
+    const pgn =
+      '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4 8. O-O ' +
+      'Bxc3 9. bxc3 d5 10. Ba3 dxc4 11. Re1 Be6 12. Rxe4 Qd5 1/2-1/2';
+    const score = (request: AnalyzeRequest) =>
+      request.depth === PRESETS.fast.depth && request.fen.includes(' b ') ? -300 : 0;
+    const reviewOn = async (lanes: number) => {
+      await clearLibrary();
+      await clearAnalysisCache();
+      resetInsightsJobForTests();
+      setJobLanesForTests(lanes);
+      const engines: FakeEngine[] = [];
+      setEngineFactoryForTests(() => {
+        const engine = fakeEngine({ score });
+        engines.push(engine);
+        return engine;
+      });
+      start([record(0, pgn)]);
+      expect(await waitForJob(finished)).toMatchObject({ status: 'done', analysed: 1 });
+      return { entry: (await getLibraryEntry('lichess/game0000'))!, engines };
+    };
+    const one = await reviewOn(1);
+    const four = await reviewOn(4);
+    expect(four.engines).toHaveLength(4);
+    expect(four.engines.every((engine) => engine.searches.length > 0)).toBe(true);
+    expect(verifySearches(one.engines[0]!).length).toBeGreaterThan(0);
+    expect(four.entry.moves).toEqual(one.entry.moves);
+    expect(four.entry.white.accuracy).toBe(one.entry.white.accuracy);
+    expect(four.entry.black.accuracy).toBe(one.entry.black.accuracy);
   });
 
   it('carries on with fewer engines when an extra one cannot start', async () => {
